@@ -1,27 +1,42 @@
 {
   system ? builtins.currentSystem,
   inputs ? import ../.tack,
-  pkgs ? import inputs.nixpkgs {
-    inherit system;
-    overlays = [ (import inputs.rust-overlay) ];
-  },
-  craneLib ? (import inputs.crane { inherit pkgs; }).overrideToolchain (
-    p: p.rust-bin.stable.latest.default
-  ),
-  cix ?
-    (import ./. {
-      inherit
-        system
-        inputs
-        pkgs
-        craneLib
-        ;
-    }).cix,
+  pkgs ? import inputs.nixpkgs { inherit system; },
 }:
 let
-  inherit (pkgs) lib;
+  mkCix = pkgs: (import ./. { inherit pkgs; }).cix;
 
-  mapMaybeList = fn: elem: if builtins.isList elem then map fn elem else fn elem;
+  inherit (pkgs) lib;
+  inherit (import ./types.nix { inherit lib; }) job;
+
+  mapMaybeList =
+    fn: jobVal:
+    let
+      normalize =
+        j:
+        (lib.evalModules {
+          modules = [
+            { options.__job = lib.mkOption { type = job; }; }
+            { __job = j; }
+          ];
+        }).config.__job;
+    in
+    if builtins.isList jobVal then
+      map (
+        e:
+        fn {
+          job = normalize e.job;
+          pkgs' = e.pkgs';
+        }
+      ) jobVal
+    else
+      fn {
+        job = normalize (jobVal {
+          inherit pkgs;
+          inherit (pkgs) lib;
+        });
+        pkgs' = pkgs;
+      };
 
   cixConfig =
     module:
@@ -29,22 +44,23 @@ let
       module.config
       // {
         jobs = builtins.mapAttrs (
-          _: job:
+          _: job':
           mapMaybeList (
-            job':
-            job'
+            { job, pkgs' }:
+            job
             // {
+              inherit (pkgs'.stdenv.hostPlatform) system;
               steps = map (
                 step:
                 let
-                  inherit (pkgs)
+                  inherit (pkgs')
                     writeShellApplication
                     writeTextFile
                     ;
                   script = writeTextFile {
                     name = "cix-step-script";
                     text = ''
-                      #! ${lib.getExe step.shell} ${
+                      #! ${lib.getExe (if step.shell == null then pkgs'.bash else step.shell)} ${
                         lib.optionalString (step.shellArgs != null) (lib.escapeShellArgs step.shellArgs)
                       }
                       ${step.run}
@@ -54,16 +70,16 @@ let
                 in
                 writeShellApplication {
                   name = "cix-step";
-                  runtimeInputs = [ cix ] ++ step.path;
+                  runtimeInputs = [ (mkCix pkgs') ] ++ step.path;
                   text = ''
-                    cix step ${script} ${
+                    cix step --script ${script} ${
                       lib.optionalString (step.name != null) "--name ${lib.strings.escapeShellArg step.name}"
                     }
                   '';
                 }
-              ) job'.steps;
+              ) job.steps;
             }
-          ) job
+          ) job'
         ) module.config.jobs;
       }
     );
@@ -77,8 +93,6 @@ cixConfig (
       workflow
     ];
     specialArgs = {
-      inherit pkgs;
-
       ci = {
         secrets = lib.genAttrs env.secrets (name: {
           __cixSecret = name;
@@ -86,7 +100,18 @@ cixConfig (
 
         inherit (env) vars;
 
-        matrix = variants: fn: map (v: fn v) variants;
+        matrix =
+          variants: fn:
+          map (v: {
+            job = fn (
+              {
+                inherit pkgs;
+                inherit (pkgs) lib;
+              }
+              // v
+            );
+            pkgs' = pkgs;
+          }) variants;
 
         steps = {
           build =
@@ -96,7 +121,7 @@ cixConfig (
             {
               name = "cix: Build ${if name == "" then deriv else name}";
               run = ''
-                cix build ${deriv}
+                cix build --derivation ${deriv}
               '';
             };
 
@@ -108,7 +133,7 @@ cixConfig (
             {
               name = "cix: Upload ${name}";
               run = ''
-                cix upload ${lib.escapeShellArg name} --derivation ${deriv}
+                cix upload --name ${lib.escapeShellArg name} --derivation ${deriv}
               '';
             };
         };

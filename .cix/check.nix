@@ -1,34 +1,43 @@
 {
   ci,
-  pkgs,
   lib,
   ...
 }:
 let
-  rust-overlay =
-    import (fetchTarball "https://github.com/oxalica/rust-overlay/archive/master.tar.gz") pkgs
-      { };
+  inputs = import ../.tack;
 
-  cix = system: import ../. { inherit system; };
+  rust-overlay = import (
+    fetchTarball "https://github.com/oxalica/rust-overlay/archive/master.tar.gz"
+  );
+
+  cix = pkgs: import ../. { inherit pkgs; };
 in
 {
   jobs = {
     build =
       ci.matrix
         [
-          { runner = "x86_64-linux"; }
-          { runner = "aarch64-linux"; }
-          { runner = "aarch64-darwin"; }
+          {
+            name = "Linux AMD64";
+            pkgs = import inputs.nixpkgs { system = "x86_64-linux"; };
+          }
+          {
+            name = "Linux ARM64";
+            pkgs = import inputs.nixpkgs { system = "aarch64-linux"; };
+          }
+          {
+            name = "macOS";
+            pkgs = import inputs.nixpkgs { system = "aarch64-darwin"; };
+          }
         ]
         (
-          { runner }: {
-            name = "Build on ${runner}";
-            runs-on = runner;
-            steps = [ (ci.steps.build "cix" (cix runner)) ];
+          { pkgs, name, ... }: {
+            name = "Build on ${name}";
+            steps = [ (ci.steps.build "cix" (cix pkgs)) ];
           }
         );
 
-    rustfmt-msrv = {
+    rustfmt-msrv = { pkgs, ... }: {
       name = "Check rustfmt formatting on MSRV";
       steps = [
         {
@@ -37,7 +46,7 @@ in
             cargo fmt --check --all
           '';
           path = [
-            rust-overlay.rust-bin.stable."1.88.0".default
+            pkgs.cargo
           ];
         }
       ];
@@ -46,15 +55,26 @@ in
     tests-nightly =
       ci.matrix
         [
-          { runner = "aarch64-linux"; }
-          { runner = "aarch64-darwin"; }
+          {
+            name = "Linux ARM64";
+            pkgs = import inputs.nixpkgs {
+              system = "aarch64-linux";
+              overlays = [ rust-overlay ];
+            };
+          }
+          {
+            name = "macOS";
+            pkgs = import inputs.nixpkgs {
+              system = "aarch64-darwin";
+              overlays = [ rust-overlay ];
+            };
+          }
         ]
         (
-          { runner }:
+          { pkgs, name, ... }:
           {
-            name = "Run tests on nightly (${runner})";
+            name = "Run tests on nightly (${name})";
             strategy.fail-fast = false;
-            runs-on = runner;
             steps = [
               {
                 name = "Test";
@@ -65,58 +85,72 @@ in
                   cargo nextest run --no-fail-fast --verbose --locked
                 '';
                 path = [
-                  (rust-overlay.rust-bin.selectLatestNightlyWith (toolchain: toolchain.default))
+                  (pkgs.rust-bin.selectLatestNightlyWith (toolchain: toolchain.default))
                   pkgs.cargo-nextest
                 ]
-                ++ lib.optionals (runner == "x86_64-darwin" || runner == "aarch64-darwin") [ pkgs.lld ];
+                ++ lib.optionals (pkgs.stdenv.hostPlatform.isDarwin) [ pkgs.lld ];
               }
             ];
           }
         );
 
-    coverage-nightly = {
-      name = "Test coverage on nightly";
-      runs-on = "x86_64-linux";
-      steps = [
-        {
-          name = "Test with coverage";
-          env = {
-            RUSTFLAGS = "-A dead_code -A unused_variables";
-          };
-          run = ''
-            cargo llvm-cov nextest --no-fail-fast --verbose --codecov --locked --output-path codecov.json
-          '';
-          path = [
-            (rust-overlay.rust-bin.selectLatestNightlyWith (toolchain: toolchain.default))
-            pkgs.cargo-llvm-cov
-            pkgs.cargo-nextest
-          ];
-        }
-        {
-          name = "Upload coverage reports to Codecov";
-          env = {
-            CODECOV_TOKEN = ci.secrets.CODECOV_TOKEN;
-          };
-          run = ''
-            codecovcli do-upload -f ./codecov.json --token "$CODECOV_TOKEN"
-          '';
-          path = [
-            pkgs.codecov-cli
-          ];
-        }
-      ];
-    };
+    coverage-nightly =
+      ci.matrix
+        [
+          {
+            pkgs = import inputs.nixpkgs {
+              system = "x86_64-linux";
+              overlays = [ rust-overlay ];
+            };
+          }
+        ]
+        (
+          { pkgs, ... }: {
+            name = "Test coverage on nightly";
+            steps = [
+              {
+                name = "Test with coverage";
+                env = {
+                  RUSTFLAGS = "-A dead_code -A unused_variables";
+                };
+                run = ''
+                  cargo llvm-cov nextest --no-fail-fast --verbose --codecov --locked --output-path codecov.json
+                '';
+                path = [
+                  (pkgs.rust-bin.selectLatestNightlyWith (toolchain: toolchain.default))
+                  pkgs.cargo-llvm-cov
+                  pkgs.cargo-nextest
+                ];
+              }
+              {
+                name = "Upload coverage reports to Codecov";
+                env = {
+                  CODECOV_TOKEN = ci.secrets.CODECOV_TOKEN;
+                };
+                run = ''
+                  codecovcli do-upload -f ./codecov.json --token "$CODECOV_TOKEN"
+                '';
+                path = [
+                  pkgs.codecov-cli
+                ];
+              }
+            ];
+          }
+        );
 
     build-docker =
       ci.matrix
         [
-          { runner = "x86_64-linux"; }
-          { runner = "aarch64-linux"; }
+          {
+            pkgs = import inputs.nixpkgs { system = "x86_64-linux"; };
+          }
+          {
+            pkgs = import inputs.nixpkgs { system = "aarch64-linux"; };
+          }
         ]
         (
-          { runner, ... }: {
-            name = "Build Docker";
-            runs-on = runner;
+          { pkgs, ... }: {
+            name = "Build Docker (${pkgs.stdenv.hostPlatform.system})";
             needs = [
               "build"
               "rustfmt-msrv"
@@ -124,18 +158,18 @@ in
               "coverage-nightly"
             ];
             steps = [
-              (ci.steps.upload "docker-${runner}" (
+              (ci.steps.upload "docker-${pkgs.stdenv.hostPlatform.system}" (
                 pkgs.dockerTools.buildImage {
                   name = "cix";
                   tag = "latest";
-                  config.Entrypoint = [ (lib.getExe (cix runner)) ];
+                  config.Entrypoint = [ (lib.getExe (cix pkgs)) ];
                 }
               ))
             ];
           }
         );
 
-    push-docker = {
+    push-docker = { pkgs, ... }: {
       name = "Build Docker";
       needs = [
         "build-docker"
@@ -188,8 +222,8 @@ in
             );
           };
           run = ''
-            amd_image=$(cix download docker-x86_64-linux)
-            arm_image=$(cix download docker-aarch64-linux)
+            amd_image=$(cix download --name docker-x86_64-linux)
+            arm_image=$(cix download --name docker-aarch64-linux)
 
             for TAG in $TAGS; do
               skopeo copy docker-archive:$amd_image "docker://$TAG-amd64"
