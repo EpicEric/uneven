@@ -13,3 +13,21 @@
 //
 // You should have received a copy of the GNU Affero General Public License along
 // with this program. If not, see <https://www.gnu.org/licenses/>.
+
+use std::collections::HashMap;
+
+use serde::Deserialize;
+
+use crate::secret::SecretString;
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct CixEnvironment {
+    pub(crate) secrets: HashMap<String, SecretString>,
+    pub(crate) vars: HashMap<String, String>,
+}
+
+impl CixEnvironment {
+    pub(crate) fn get() -> color_eyre::Result<CixEnvironment> {
+        todo!()
+    }
+}

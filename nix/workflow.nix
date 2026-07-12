@@ -1,3 +1,19 @@
+# cix: A Nix-based CI helper
+# Copyright (C) 2026 Eric Rodrigues Pires
+#
+# This program is free software: you can redistribute it and/or modify it under
+# the terms of the GNU Affero General Public License as published by the Free
+# Software Foundation, either version 3 of the License, or (at your option)
+# any later version.
+#
+# This program is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+# FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for
+# more details.
+#
+# You should have received a copy of the GNU Affero General Public License along
+# with this program. If not, see <https://www.gnu.org/licenses/>.
+
 {
   system ? builtins.currentSystem,
   inputs ? import ../.tack,
@@ -9,29 +25,28 @@ let
   inherit (pkgs) lib;
   inherit (import ./types.nix { inherit lib; }) job;
 
+  normalizeJob =
+    j:
+    (lib.evalModules {
+      modules = [
+        { options.__job = lib.mkOption { type = job; }; }
+        { __job = j; }
+      ];
+    }).config.__job;
+
   mapMaybeList =
     fn: jobVal:
-    let
-      normalize =
-        j:
-        (lib.evalModules {
-          modules = [
-            { options.__job = lib.mkOption { type = job; }; }
-            { __job = j; }
-          ];
-        }).config.__job;
-    in
     if builtins.isList jobVal then
       map (
         e:
         fn {
-          job = normalize e.job;
+          job = normalizeJob e.job;
           pkgs' = e.pkgs';
         }
       ) jobVal
     else
       fn {
-        job = normalize (jobVal {
+        job = normalizeJob (jobVal {
           inherit pkgs;
           inherit (pkgs) lib;
         });
@@ -49,7 +64,8 @@ let
             { job, pkgs' }:
             job
             // {
-              inherit (pkgs'.stdenv.hostPlatform) system;
+              buildSystem = pkgs'.stdenv.buildPlatform.system;
+              hostSystem = pkgs'.stdenv.hostPlatform.system;
               steps = map (
                 step:
                 let
@@ -57,25 +73,42 @@ let
                     writeShellApplication
                     writeTextFile
                     ;
-                  script = writeTextFile {
-                    name = "cix-step-script";
-                    text = ''
-                      #! ${lib.getExe (if step.shell == null then pkgs'.bash else step.shell)} ${
-                        lib.optionalString (step.shellArgs != null) (lib.escapeShellArgs step.shellArgs)
-                      }
-                      ${step.run}
-                    '';
-                    executable = true;
-                  };
+                  script =
+                    text:
+                    writeTextFile {
+                      name = "cix-step-script";
+                      text = ''
+                        #! ${lib.getExe (if step.shell == null then pkgs'.bash else step.shell)} ${
+                          lib.optionalString (step.shellArgs != null) (lib.escapeShellArgs step.shellArgs)
+                        }
+                        ${text}
+                      '';
+                      executable = true;
+                    };
                 in
-                writeShellApplication {
-                  name = "cix-step";
-                  runtimeInputs = [ (mkCix pkgs') ] ++ step.path;
-                  text = ''
-                    cix step --script ${script} ${
-                      lib.optionalString (step.name != null) "--name ${lib.strings.escapeShellArg step.name}"
-                    }
-                  '';
+                {
+                  run = writeShellApplication {
+                    name = "cix-step";
+                    runtimeInputs = [ (mkCix pkgs') ] ++ step.path;
+                    text = ''
+                      cix step --script ${script step.run} ${
+                        lib.optionalString (step.name != null) "--name ${lib.strings.escapeShellArg step.name}"
+                      }
+                    '';
+                  };
+                  teardown =
+                    if step.teardown == null then
+                      null
+                    else
+                      writeShellApplication {
+                        name = "cix-step-teardown";
+                        runtimeInputs = [ (mkCix pkgs') ] ++ step.path;
+                        text = ''
+                          cix step --teardown --script ${script step.teardown} ${
+                            lib.optionalString (step.name != null) "--name ${lib.strings.escapeShellArg step.name}"
+                          }
+                        '';
+                      };
                 }
               ) job.steps;
             }
@@ -110,7 +143,7 @@ cixConfig (
               }
               // v
             );
-            pkgs' = pkgs;
+            pkgs' = v.pkgs or pkgs;
           }) variants;
 
         steps = {

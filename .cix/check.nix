@@ -147,6 +147,9 @@ in
           {
             pkgs = import inputs.nixpkgs { system = "aarch64-linux"; };
           }
+          {
+            pkgs = import inputs.nixpkgs { system = "aarch64-darwin"; };
+          }
         ]
         (
           { pkgs, ... }: {
@@ -158,12 +161,14 @@ in
               "coverage-nightly"
             ];
             steps = [
-              (ci.steps.upload "docker-${pkgs.stdenv.hostPlatform.system}" (
-                pkgs.dockerTools.buildImage {
-                  name = "cix";
-                  tag = "latest";
-                  config.Entrypoint = [ (lib.getExe (cix pkgs)) ];
-                }
+              (lib.mkIf (pkgs.stdenv.hostPlatform.isLinux) (
+                ci.steps.upload "docker-${pkgs.stdenv.hostPlatform.system}" (
+                  pkgs.dockerTools.buildImage {
+                    name = "cix";
+                    tag = "latest";
+                    config.Entrypoint = [ (lib.getExe (cix pkgs)) ];
+                  }
+                )
               ))
             ];
           }
