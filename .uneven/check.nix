@@ -1,5 +1,5 @@
 {
-  ci,
+  runner,
   lib,
   ...
 }:
@@ -13,7 +13,7 @@ in
 {
   jobs = {
     build =
-      ci.matrix
+      runner.matrix
         [
           {
             name = "Linux AMD64";
@@ -31,7 +31,7 @@ in
         (
           { pkgs, name, ... }: {
             name = "Build on ${name}";
-            steps = [ (ci.steps.build "uneven" (mkUneven pkgs)) ];
+            steps = [ (runner.steps.build "uneven" (mkUneven pkgs)) ];
           }
         );
 
@@ -51,7 +51,7 @@ in
     };
 
     tests-nightly =
-      ci.matrix
+      runner.matrix
         [
           {
             name = "Linux ARM64";
@@ -93,7 +93,7 @@ in
         );
 
     coverage-nightly =
-      ci.matrix
+      runner.matrix
         [
           {
             pkgs = import <nixpkgs> {
@@ -123,7 +123,7 @@ in
               {
                 name = "Upload coverage reports to Codecov";
                 env = {
-                  CODECOV_TOKEN = ci.secrets.CODECOV_TOKEN;
+                  CODECOV_TOKEN = runner.secrets.CODECOV_TOKEN;
                 };
                 run = ''
                   codecovcli do-upload -f ./codecov.json --token "$CODECOV_TOKEN"
@@ -137,7 +137,7 @@ in
         );
 
     build-docker =
-      ci.matrix
+      runner.matrix
         [
           {
             pkgs = import <nixpkgs> { system = "x86_64-linux"; };
@@ -163,7 +163,7 @@ in
             ];
             steps = [
               (lib.mkIf (pkgs.stdenv.hostPlatform.isLinux) (
-                ci.steps.upload "docker-${pkgs.stdenv.hostPlatform.system}" (
+                runner.steps.upload "docker-${pkgs.stdenv.hostPlatform.system}" (
                   pkgs.dockerTools.buildImage {
                     name = "uneven";
                     tag = "latest";
@@ -176,7 +176,7 @@ in
         );
 
     push-docker =
-      ci.matrix
+      runner.matrix
         [
           {
             system-features = [ "docker" ];
@@ -191,9 +191,9 @@ in
             steps = [
               {
                 name = "Login to DockerHub";
-                env.DOCKERHUB_PUSH_TOKEN = ci.secrets.DOCKERHUB_PUSH_TOKEN;
+                env.DOCKERHUB_PUSH_TOKEN = runner.secrets.DOCKERHUB_PUSH_TOKEN;
                 run = ''
-                  echo $DOCKERHUB_PUSH_TOKEN | docker login --password-stdin --username ${ci.vars.DOCKERHUB_USERNAME} docker.io
+                  echo $DOCKERHUB_PUSH_TOKEN | docker login --password-stdin --username ${runner.vars.DOCKERHUB_USERNAME} docker.io
                 '';
                 teardown = ''
                   docker logout docker.io
@@ -205,10 +205,10 @@ in
               {
                 name = "Login to GHCR";
                 env = {
-                  GITHUB_TOKEN = ci.secrets.GITHUB_TOKEN;
+                  GITHUB_TOKEN = runner.secrets.GITHUB_TOKEN;
                 };
                 run = ''
-                  echo $GITHUB_TOKEN | docker login --pasword-stdin --username ${ci.vars.GITHUB_USERNAME} ghcr.io
+                  echo $GITHUB_TOKEN | docker login --pasword-stdin --username ${runner.vars.GITHUB_USERNAME} ghcr.io
                 '';
                 teardown = ''
                   docker logout ghcr.io
@@ -224,8 +224,8 @@ in
                     map ({ image, tag }: "${image}:${tag}") (
                       lib.cartesianProduct {
                         image = [
-                          "${ci.vars.DOCKERHUB_USERNAME}/uneven"
-                          "ghcr.io/${ci.vars.GITHUB_USERNAME}/uneven"
+                          "${runner.vars.DOCKERHUB_USERNAME}/uneven"
+                          "ghcr.io/${runner.vars.GITHUB_USERNAME}/uneven"
                         ];
                         tag = [
                           "latest"

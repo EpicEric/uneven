@@ -55,8 +55,8 @@ pub(crate) struct UnevenStrategy {
 
 #[derive(Debug, Deserialize)]
 pub(crate) struct UnevenStep {
-    pub(crate) run: PathBuf,
-    pub(crate) teardown: Option<PathBuf>,
+    pub(crate) runDrv: PathBuf,
+    pub(crate) teardownDrv: Option<PathBuf>,
     pub(crate) env: HashMap<String, UnevenStepEnvVar>,
 }
 
@@ -78,7 +78,6 @@ impl UnevenEnvironment {
         &mut self,
         workflow: PathBuf,
         dry_run: bool,
-        show_trace: bool,
         checkout: CheckoutStrategy,
     ) -> color_eyre::Result<()> {
         let workflow_canonical = std::fs::canonicalize(&workflow)?;
@@ -105,11 +104,15 @@ impl UnevenEnvironment {
             "(import {nix_workflow_path} {{ }}) {workflow_path} {{ secrets = builtins.fromJSON {secrets_json}; vars = builtins.fromJSON {vars_json}; }}"
         );
 
-        let mut command = Command::new("nix-instantiate");
-        command.args(["--impure", "--eval", "--strict", "--raw"]);
-        if show_trace {
-            command.arg("--show-trace");
-        }
+        let mut command = Command::new("nix");
+        command.args([
+            "--extra-experimental-features",
+            "nix-command",
+            "eval",
+            "--impure",
+            "--json",
+            "--keep-derivations",
+        ]);
         let output = command.arg("--expr").arg(nix_command).output()?;
 
         if !output.status.success() {
@@ -120,6 +123,8 @@ impl UnevenEnvironment {
                 "Failed to evaluate uneven workflow"
             ));
         }
+
+        println!("{}", String::from_utf8_lossy(&output.stdout));
 
         let workflow: UnevenWorkflow = serde_json::from_slice(&output.stdout)?;
 

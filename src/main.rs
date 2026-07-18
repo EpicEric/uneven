@@ -39,8 +39,6 @@ enum Command {
         workflow: PathBuf,
         #[arg(long)]
         dry_run: bool,
-        #[arg(long)]
-        show_trace: bool,
         #[arg(
             long,
             value_enum,
@@ -83,11 +81,10 @@ fn main() -> color_eyre::Result<()> {
         Command::Run {
             workflow,
             dry_run,
-            show_trace,
             checkout,
         } => {
             let mut environment = UnevenEnvironment::get()?;
-            environment.run_workflow(workflow, dry_run, show_trace, checkout)?;
+            environment.run_workflow(workflow, dry_run, checkout)?;
         }
         Command::Completions { shell } => {
             clap_complete::generate(

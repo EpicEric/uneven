@@ -17,8 +17,16 @@
 {
   system ? builtins.currentSystem,
   pkgs ? import <nixpkgs> { inherit system; },
-  mkUneven ? pkgs: (import ./. { inherit pkgs; }).uneven,
+  mkUneven ? pkgs':
+    (
+      import ./. {
+        pkgs = import <nixpkgs> {
+          inherit (pkgs'.stdenv.hostPlatform) system;
+        };
+      }
+    ).uneven,
 }:
+
 let
   inherit (pkgs) lib;
   inherit (import ./types.nix { inherit lib; }) job;
@@ -53,89 +61,110 @@ let
         system-features = [ ];
       };
 
+  stepFn = pkgs': step:
+  let
+    inherit (pkgs')
+      writeShellApplication
+      writeTextFile
+      ;
+    script =
+      text:
+      writeTextFile {
+        name = "uneven-step-script";
+        text = ''
+          #! ${lib.getExe (if step.shell == null then pkgs'.bash else step.shell)} ${
+            lib.optionalString (step.shellArgs != null) (lib.escapeShellArgs step.shellArgs)
+          }
+          ${text}
+        '';
+        executable = true;
+      };
+  in
+  {
+    runDrv = (writeShellApplication {
+      name = "uneven-step";
+      runtimeInputs = [ (mkUneven pkgs') ] ++ step.path;
+      text = ''
+        uneven step \
+          --derivation ${script step.run} \
+          --env ${lib.strings.escapeShellArg (builtins.toJSON step.env)} \
+          ${lib.optionalString (step.name != null) "--name ${lib.strings.escapeShellArg step.name}"}
+      '';
+    }).drvPath;
+
+    teardownDrv =
+      if step.teardown == null then
+        null
+      else
+        (writeShellApplication {
+          name = "uneven-step-teardown";
+          runtimeInputs = [ (mkUneven pkgs') ] ++ step.path;
+          text = ''
+            uneven step \
+              --teardown \
+              --derivation ${script step.teardown} \
+              --env ${lib.strings.escapeShellArg (builtins.toJSON step.env)} \
+              ${lib.optionalString (step.name != null) "--name ${lib.strings.escapeShellArg step.name}"}
+          '';
+        }).drvPath;
+
+    env = step.env;
+  };
+
   unevenConfig =
     module:
-    builtins.toJSON (
-      module.config
-      // {
-        jobs = builtins.mapAttrs (
-          _: job':
-          mapMaybeList (
-            {
-              job,
-              pkgs',
-              system-features,
-            }:
-            job
-            // {
-              buildSystem = pkgs'.stdenv.buildPlatform.system;
-              hostSystem = pkgs'.stdenv.hostPlatform.system;
-              inherit system-features;
-              steps = map (
-                step:
-                let
-                  inherit (pkgs')
-                    writeShellApplication
-                    writeTextFile
-                    ;
-                  script =
-                    text:
-                    writeTextFile {
-                      name = "uneven-step-script";
-                      text = ''
-                        #! ${lib.getExe (if step.shell == null then pkgs'.bash else step.shell)} ${
-                          lib.optionalString (step.shellArgs != null) (lib.escapeShellArgs step.shellArgs)
-                        }
-                        ${text}
-                      '';
-                      executable = true;
-                    };
-                in
-                {
-                  run = writeShellApplication {
-                    name = "uneven-step";
-                    runtimeInputs = [ (mkUneven pkgs') ] ++ step.path;
-                    text = ''
-                      uneven step \
-                        --script ${script step.run} \
-                        --env ${lib.strings.escapeShellArg (builtins.toJSON step.env)} \
-                        ${lib.optionalString (step.name != null) "--name ${lib.strings.escapeShellArg step.name}"}
-                    '';
-                  };
-                  teardown =
-                    if step.teardown == null then
-                      null
-                    else
-                      writeShellApplication {
-                        name = "uneven-step-teardown";
-                        runtimeInputs = [ (mkUneven pkgs') ] ++ step.path;
-                        text = ''
-                          uneven step \
-                            --teardown \
-                            --script ${script step.teardown} \
-                            --env ${lib.strings.escapeShellArg (builtins.toJSON step.env)} \
-                            ${lib.optionalString (step.name != null) "--name ${lib.strings.escapeShellArg step.name}"}
-                        '';
-                      };
-                  env = step.env;
-                }
-              ) job.steps;
-            }
-          ) job'
-        ) module.config.jobs;
-      }
-    );
+    module.config
+    // {
+      jobs = builtins.mapAttrs (
+        _: job':
+        mapMaybeList (
+          {
+            job,
+            pkgs',
+            system-features,
+          }:
+          job
+          // {
+            buildSystem = pkgs'.stdenv.buildPlatform.system;
+            hostSystem = pkgs'.stdenv.hostPlatform.system;
+            inherit system-features;
+            steps = map (stepFn pkgs') job.steps;
+          }
+        ) job'
+      ) module.config.jobs;
+    };
+
+  unevenModule =
+    { lib, ... }:
+    let
+      inherit (lib) types;
+    in
+    {
+      options = {
+        name = lib.mkOption {
+          type = types.nullOr types.str;
+          default = null;
+          description = "Name of the workflow";
+        };
+        jobs = lib.mkOption {
+          type = types.attrsOf (types.nullOr types.raw);
+          description = "Jobs in the workflow.";
+        };
+      };
+    }
+  ;
 in
+
 workflow: env:
 unevenConfig (
   lib.evalModules {
     class = "uneven";
     modules = [
-      ./module.nix
+      unevenModule
       workflow
     ];
     specialArgs = {
-      ci = {
+      runner = {
         secrets = lib.genAttrs env.secrets (name: {
           __unevenSecret = name;
         });
@@ -160,7 +189,7 @@ unevenConfig (
           build =
             name: deriv:
             assert lib.assertMsg (lib.isStorePath deriv)
-              "derivation argument to ci.steps.build must be a derivation";
+              "derivation argument to runner.steps.build must be a derivation";
             {
               name = "uneven: Build ${if name == "" then deriv else name}";
               run = ''
@@ -170,9 +199,9 @@ unevenConfig (
 
           upload =
             name: deriv:
-            assert lib.assertMsg (name != "") "name argument to ci.steps.upload must not be empty";
+            assert lib.assertMsg (name != "") "name argument to runner.steps.upload must not be empty";
             assert lib.assertMsg (lib.isStorePath deriv)
-              "derivation argument to ci.steps.upload must be a derivation";
+              "derivation argument to runner.steps.upload must be a derivation";
             {
               name = "uneven: Upload ${name}";
               run = ''
