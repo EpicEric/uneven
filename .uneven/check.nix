@@ -8,7 +8,7 @@ let
     fetchTarball "https://github.com/oxalica/rust-overlay/archive/master.tar.gz"
   );
 
-  mkCix = pkgs: import ../. { inherit pkgs; };
+  mkUneven = pkgs: import ../. { inherit pkgs; };
 in
 {
   jobs = {
@@ -31,7 +31,7 @@ in
         (
           { pkgs, name, ... }: {
             name = "Build on ${name}";
-            steps = [ (ci.steps.build "cix" (mkCix pkgs)) ];
+            steps = [ (ci.steps.build "uneven" (mkUneven pkgs)) ];
           }
         );
 
@@ -165,9 +165,9 @@ in
               (lib.mkIf (pkgs.stdenv.hostPlatform.isLinux) (
                 ci.steps.upload "docker-${pkgs.stdenv.hostPlatform.system}" (
                   pkgs.dockerTools.buildImage {
-                    name = "cix";
+                    name = "uneven";
                     tag = "latest";
-                    config.Entrypoint = [ (lib.getExe (mkCix pkgs)) ];
+                    config.Entrypoint = [ (lib.getExe (mkUneven pkgs)) ];
                   }
                 )
               ))
@@ -224,8 +224,8 @@ in
                     map ({ image, tag }: "${image}:${tag}") (
                       lib.cartesianProduct {
                         image = [
-                          "${ci.vars.DOCKERHUB_USERNAME}/cix"
-                          "ghcr.io/${ci.vars.GITHUB_USERNAME}/cix"
+                          "${ci.vars.DOCKERHUB_USERNAME}/uneven"
+                          "ghcr.io/${ci.vars.GITHUB_USERNAME}/uneven"
                         ];
                         tag = [
                           "latest"
@@ -236,8 +236,8 @@ in
                   );
                 };
                 run = ''
-                  amd_image=$(cix download --name docker-x86_64-linux)
-                  arm_image=$(cix download --name docker-aarch64-linux)
+                  amd_image=$(uneven download --name docker-x86_64-linux)
+                  arm_image=$(uneven download --name docker-aarch64-linux)
 
                   for TAG in $TAGS; do
                     skopeo copy docker-archive:$amd_image "docker://$TAG-amd64"

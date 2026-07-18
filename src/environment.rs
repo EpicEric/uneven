@@ -1,4 +1,4 @@
-// cix: A Nix-based CI helper
+// uneven: A Nix-based distributed command runner
 // Copyright (C) 2026 Eric Rodrigues Pires
 //
 // This program is free software: you can redistribute it and/or modify it under
@@ -16,28 +16,60 @@
 
 use std::{
     collections::HashMap,
+    ffi::{OsStr, OsString},
     os::unix::ffi::OsStrExt,
     path::{Path, PathBuf},
 };
 
+use color_eyre::eyre::OptionExt;
 use serde::{Deserialize, Serialize};
 
 use crate::secret::SecretString;
 
 #[derive(Debug, Serialize, Deserialize)]
-pub(crate) struct CixEnvironment {
+pub(crate) struct UnevenEnvironment {
     pub(crate) secrets: HashMap<String, SecretString>,
     pub(crate) vars: HashMap<String, String>,
-    #[serde(default)]
     pub(crate) uploads: HashMap<String, PathBuf>,
 }
 
-impl CixEnvironment {
-    pub(crate) fn get() -> color_eyre::Result<CixEnvironment> {
-        match std::env::vars_os().find(|(key, _)| key == "CIX_ENVIRONMENT") {
-            Some((_, value)) => Ok(serde_json::from_slice(value.as_bytes())?),
-            None => Err(color_eyre::eyre::eyre!("Missing CIX_ENVIRONMENT envvar")),
+impl UnevenEnvironment {
+    pub(crate) fn get() -> color_eyre::Result<UnevenEnvironment> {
+        #[derive(Debug, Deserialize)]
+        struct UnevenEnvironmentInit {
+            pub(crate) secrets: Vec<String>,
+            pub(crate) vars: HashMap<String, String>,
         }
+
+        let mut env_vars: HashMap<OsString, OsString> = std::env::vars_os().collect();
+
+        let env: UnevenEnvironmentInit =
+            match env_vars.remove(OsStr::from_bytes("UNEVEN_ENVIRONMENT".as_bytes())) {
+                Some(value) => serde_json::from_slice(value.as_bytes())?,
+                None => return Err(color_eyre::eyre::eyre!("Missing UNEVEN_ENVIRONMENT envvar")),
+            };
+
+        let secrets: color_eyre::Result<HashMap<String, SecretString>> = env
+            .secrets
+            .into_iter()
+            .map(
+                |secret| match env_vars.remove(OsStr::from_bytes(secret.as_bytes())) {
+                    Some(value) => {
+                        let value = SecretString::new(value.into_string().map_err(|_| {
+                            color_eyre::eyre::eyre!("Invalid value for {secret} envvar")
+                        })?);
+                        Ok((secret, value))
+                    }
+                    None => Err(color_eyre::eyre::eyre!("Missing {secret} envvar")),
+                },
+            )
+            .collect();
+
+        Ok(Self {
+            secrets: secrets?,
+            vars: env.vars,
+            uploads: HashMap::new(),
+        })
     }
 
     pub(crate) fn upload(&mut self, name: String, derivation: PathBuf) -> color_eyre::Result<()> {
@@ -48,7 +80,10 @@ impl CixEnvironment {
         }
     }
 
-    pub(crate) fn download(&self, name: &str) -> Option<&Path> {
-        self.uploads.get(name).map(|path| path.as_ref())
+    pub(crate) fn download(&self, name: &str) -> color_eyre::Result<&Path> {
+        self.uploads
+            .get(name)
+            .map(|path| path.as_ref())
+            .ok_or_eyre("Missing upload key")
     }
 }

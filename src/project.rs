@@ -9,7 +9,7 @@ static SRC_DIR: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/src");
 
 pub(crate) fn create_project_source() -> color_eyre::Result<PathBuf> {
     let mut tmpdir = temp_dir();
-    tmpdir.push(format!("cix-{}", uuid::Uuid::new_v4()));
+    tmpdir.push(format!("uneven-{}", uuid::Uuid::new_v4()));
 
     let mut nix_dir = tmpdir.clone();
     nix_dir.push("nix");

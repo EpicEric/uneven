@@ -1,3 +1,3 @@
-# cix
+# uneven
 
-Nix-based CI helper. Pronounced "six".
+A Nix-based distributed command runner.

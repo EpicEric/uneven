@@ -7,22 +7,24 @@ use std::{
     thread::scope,
 };
 
-use crate::{environment::CixEnvironment, secret::SecretStringCollection, workflow::CixStepEnvVar};
+use crate::{
+    environment::UnevenEnvironment, secret::SecretStringCollection, workflow::UnevenStepEnvVar,
+};
 
-impl CixEnvironment {
+impl UnevenEnvironment {
     pub(crate) fn run_step(
         &self,
         derivation: PathBuf,
         teardown: bool,
-        env: &HashMap<String, CixStepEnvVar>,
+        env: &HashMap<String, UnevenStepEnvVar>,
     ) -> color_eyre::Result<()> {
         let mut step_env: HashMap<OsString, OsString> = HashMap::new();
         let mut secrets: SecretStringCollection = SecretStringCollection::new();
 
         for (key, value) in env {
             let value = match value {
-                CixStepEnvVar::Plain(value) => value.into(),
-                CixStepEnvVar::Secret(secret) => {
+                UnevenStepEnvVar::Plain(value) => value.into(),
+                UnevenStepEnvVar::Secret(secret) => {
                     let Some(secret) = self.secrets.get(&secret.secret_name) else {
                         return Err(color_eyre::eyre::eyre!(
                             "Unknown secret {}",

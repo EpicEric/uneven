@@ -1,4 +1,4 @@
-# cix: A Nix-based CI helper
+# uneven: A Nix-based distributed command runner
 # Copyright (C) 2026 Eric Rodrigues Pires
 #
 # This program is free software: you can redistribute it and/or modify it under
@@ -24,7 +24,7 @@
   stdenv,
 }:
 rustPlatform.buildRustPackage {
-  pname = "cix";
+  pname = "uneven";
   version = (lib.importTOML ../Cargo.toml).package.version;
 
   inherit src;
@@ -41,22 +41,22 @@ rustPlatform.buildRustPackage {
   doCheck = false;
 
   postInstall = ''
-    wrapProgram $out/bin/cix \
+    wrapProgram $out/bin/uneven \
       --suffix PATH : ${lib.makeBinPath [ nix ]}
   ''
   + lib.optionalString (stdenv.buildPlatform.canExecute stdenv.hostPlatform) ''
-    installShellCompletion --cmd cix \
-      --bash <($out/bin/cix completions bash) \
-      --fish <($out/bin/cix completions fish) \
-      --zsh <($out/bin/cix completions zsh)
+    installShellCompletion --cmd uneven \
+      --bash <($out/bin/uneven completions bash) \
+      --fish <($out/bin/uneven completions fish) \
+      --zsh <($out/bin/uneven completions zsh)
   '';
 
   meta = {
-    name = "cix";
-    description = "Nix-based CI helper";
-    homepage = "https://github.com/EpicEric/cix";
+    name = "uneven";
+    description = "A Nix-based distributed command runner";
+    homepage = "https://github.com/EpicEric/uneven";
     license = lib.licenses.agpl3Plus;
-    mainProgram = "cix";
+    mainProgram = "uneven";
     platforms = lib.platforms.all;
   };
 }

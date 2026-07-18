@@ -1,4 +1,4 @@
-# cix: A Nix-based CI helper
+# uneven: A Nix-based distributed command runner
 # Copyright (C) 2026 Eric Rodrigues Pires
 #
 # This program is free software: you can redistribute it and/or modify it under
@@ -17,7 +17,7 @@
 {
   system ? builtins.currentSystem,
   pkgs ? import <nixpkgs> { inherit system; },
-  mkCix ? pkgs: (import ./. { inherit pkgs; }).cix,
+  mkUneven ? pkgs: (import ./. { inherit pkgs; }).uneven,
 }:
 let
   inherit (pkgs) lib;
@@ -53,7 +53,7 @@ let
         system-features = [ ];
       };
 
-  cixConfig =
+  unevenConfig =
     module:
     builtins.toJSON (
       module.config
@@ -81,7 +81,7 @@ let
                   script =
                     text:
                     writeTextFile {
-                      name = "cix-step-script";
+                      name = "uneven-step-script";
                       text = ''
                         #! ${lib.getExe (if step.shell == null then pkgs'.bash else step.shell)} ${
                           lib.optionalString (step.shellArgs != null) (lib.escapeShellArgs step.shellArgs)
@@ -93,10 +93,10 @@ let
                 in
                 {
                   run = writeShellApplication {
-                    name = "cix-step";
-                    runtimeInputs = [ (mkCix pkgs') ] ++ step.path;
+                    name = "uneven-step";
+                    runtimeInputs = [ (mkUneven pkgs') ] ++ step.path;
                     text = ''
-                      cix step \
+                      uneven step \
                         --script ${script step.run} \
                         --env ${lib.strings.escapeShellArg (builtins.toJSON step.env)} \
                         ${lib.optionalString (step.name != null) "--name ${lib.strings.escapeShellArg step.name}"}
@@ -107,10 +107,10 @@ let
                       null
                     else
                       writeShellApplication {
-                        name = "cix-step-teardown";
-                        runtimeInputs = [ (mkCix pkgs') ] ++ step.path;
+                        name = "uneven-step-teardown";
+                        runtimeInputs = [ (mkUneven pkgs') ] ++ step.path;
                         text = ''
-                          cix step \
+                          uneven step \
                             --teardown \
                             --script ${script step.teardown} \
                             --env ${lib.strings.escapeShellArg (builtins.toJSON step.env)} \
@@ -127,9 +127,9 @@ let
     );
 in
 workflow: env:
-cixConfig (
+unevenConfig (
   lib.evalModules {
-    class = "cix";
+    class = "uneven";
     modules = [
       ./module.nix
       workflow
@@ -137,7 +137,7 @@ cixConfig (
     specialArgs = {
       ci = {
         secrets = lib.genAttrs env.secrets (name: {
-          __cixSecret = name;
+          __unevenSecret = name;
         });
 
         inherit (env) vars;
@@ -162,9 +162,9 @@ cixConfig (
             assert lib.assertMsg (lib.isStorePath deriv)
               "derivation argument to ci.steps.build must be a derivation";
             {
-              name = "cix: Build ${if name == "" then deriv else name}";
+              name = "uneven: Build ${if name == "" then deriv else name}";
               run = ''
-                cix build --derivation ${deriv}
+                uneven build --derivation ${deriv}
               '';
             };
 
@@ -174,9 +174,9 @@ cixConfig (
             assert lib.assertMsg (lib.isStorePath deriv)
               "derivation argument to ci.steps.upload must be a derivation";
             {
-              name = "cix: Upload ${name}";
+              name = "uneven: Upload ${name}";
               run = ''
-                cix upload --name ${lib.escapeShellArg name} --derivation ${deriv}
+                uneven upload --name ${lib.escapeShellArg name} --derivation ${deriv}
               '';
             };
         };

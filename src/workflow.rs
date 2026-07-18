@@ -1,4 +1,4 @@
-// cix: A Nix-based CI helper
+// uneven: A Nix-based distributed command runner
 // Copyright (C) 2026 Eric Rodrigues Pires
 //
 // This program is free software: you can redistribute it and/or modify it under
@@ -18,23 +18,23 @@ use std::{collections::HashMap, io::Write, path::PathBuf, process::Command};
 
 use serde::Deserialize;
 
-use crate::{environment::CixEnvironment, project::create_project_source};
+use crate::{CheckoutStrategy, environment::UnevenEnvironment, project::create_project_source};
 
 #[derive(Debug, Deserialize)]
-pub(crate) struct CixWorkflow {
+pub(crate) struct UnevenWorkflow {
     pub(crate) name: Option<String>,
-    pub(crate) jobs: HashMap<String, CixJobContainer>,
+    pub(crate) jobs: HashMap<String, UnevenJobContainer>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
-pub(crate) enum CixJobContainer {
-    Single(CixJob),
-    Multiple(Vec<CixJob>),
+pub(crate) enum UnevenJobContainer {
+    Single(UnevenJob),
+    Multiple(Vec<UnevenJob>),
 }
 
 #[derive(Debug, Deserialize)]
-pub(crate) struct CixJob {
+pub(crate) struct UnevenJob {
     pub(crate) name: Option<String>,
     #[serde(rename = "buildSystem")]
     pub(crate) build_system: String,
@@ -42,43 +42,44 @@ pub(crate) struct CixJob {
     pub(crate) host_system: String,
     #[serde(rename = "system-features")]
     pub(crate) system_features: Vec<String>,
-    pub(crate) strategy: Option<CixStrategy>,
+    pub(crate) strategy: Option<UnevenStrategy>,
     pub(crate) needs: Option<Vec<String>>,
-    pub(crate) steps: Vec<CixStep>,
+    pub(crate) steps: Vec<UnevenStep>,
 }
 
 #[derive(Debug, Deserialize)]
-pub(crate) struct CixStrategy {
+pub(crate) struct UnevenStrategy {
     #[serde(rename = "fail-fast")]
     pub(crate) fail_fast: bool,
 }
 
 #[derive(Debug, Deserialize)]
-pub(crate) struct CixStep {
+pub(crate) struct UnevenStep {
     pub(crate) run: PathBuf,
     pub(crate) teardown: Option<PathBuf>,
-    pub(crate) env: HashMap<String, CixStepEnvVar>,
+    pub(crate) env: HashMap<String, UnevenStepEnvVar>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
-pub(crate) enum CixStepEnvVar {
+pub(crate) enum UnevenStepEnvVar {
     Plain(String),
-    Secret(CixStepSecret),
+    Secret(UnevenStepSecret),
 }
 
 #[derive(Debug, Deserialize)]
-pub(crate) struct CixStepSecret {
-    #[serde(rename = "__cixSecret")]
+pub(crate) struct UnevenStepSecret {
+    #[serde(rename = "__unevenSecret")]
     pub(crate) secret_name: String,
 }
 
-impl CixEnvironment {
+impl UnevenEnvironment {
     pub(crate) fn run_workflow(
         &mut self,
         workflow: PathBuf,
         dry_run: bool,
         show_trace: bool,
+        checkout: CheckoutStrategy,
     ) -> color_eyre::Result<()> {
         let workflow_canonical = std::fs::canonicalize(&workflow)?;
         let workflow_str = workflow_canonical
@@ -115,10 +116,12 @@ impl CixEnvironment {
             let mut stderr = std::io::stderr();
             stderr.write_all(&output.stderr)?;
             stderr.flush()?;
-            return Err(color_eyre::eyre::eyre!("Failed to evaluate cix workflow"));
+            return Err(color_eyre::eyre::eyre!(
+                "Failed to evaluate uneven workflow"
+            ));
         }
 
-        let workflow: CixWorkflow = serde_json::from_slice(&output.stdout)?;
+        let workflow: UnevenWorkflow = serde_json::from_slice(&output.stdout)?;
 
         if dry_run {
             println!("{:?}", &workflow);

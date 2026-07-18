@@ -95,20 +95,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9330f8b2ff13f34540b44e946ef35111825727b38d33286ef986142615121801"
 
 [[package]]
-name = "cix"
-version = "0.1.0"
-dependencies = [
- "clap",
- "clap_complete",
- "color-eyre",
- "include_dir",
- "serde",
- "serde_json",
- "uuid",
- "zeroize",
-]
-
-[[package]]
 name = "clap"
 version = "4.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -514,6 +500,20 @@ dependencies = [
  "sharded-slab",
  "thread_local",
  "tracing-core",
+]
+
+[[package]]
+name = "uneven"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "clap_complete",
+ "color-eyre",
+ "include_dir",
+ "serde",
+ "serde_json",
+ "uuid",
+ "zeroize",
 ]
 
 [[package]]

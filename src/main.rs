@@ -1,4 +1,4 @@
-// cix: A Nix-based CI helper
+// uneven: A Nix-based distributed command runner
 // Copyright (C) 2026 Eric Rodrigues Pires
 //
 // This program is free software: you can redistribute it and/or modify it under
@@ -18,10 +18,9 @@ use std::path::PathBuf;
 
 use clap::{CommandFactory, Parser, ValueEnum};
 
-use crate::environment::CixEnvironment;
+use crate::environment::UnevenEnvironment;
 
 mod environment;
-mod job;
 mod project;
 mod secret;
 mod step;
@@ -29,7 +28,7 @@ mod workflow;
 
 #[doc(hidden)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
-enum CheckoutStrategy {
+pub(crate) enum CheckoutStrategy {
     Git,
 }
 
@@ -87,8 +86,8 @@ fn main() -> color_eyre::Result<()> {
             show_trace,
             checkout,
         } => {
-            let mut environment = CixEnvironment::get()?;
-            environment.run_workflow(workflow, dry_run, show_trace)?;
+            let mut environment = UnevenEnvironment::get()?;
+            environment.run_workflow(workflow, dry_run, show_trace, checkout)?;
         }
         Command::Completions { shell } => {
             clap_complete::generate(
@@ -104,7 +103,7 @@ fn main() -> color_eyre::Result<()> {
             teardown,
             name,
         } => {
-            let environment = CixEnvironment::get()?;
+            let environment = UnevenEnvironment::get()?;
             environment.run_step(derivation, teardown, &serde_json::from_str(&env)?)?;
         }
         Command::Build { derivation } => todo!(),
