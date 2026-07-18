@@ -1,3 +1,19 @@
+// uneven: A Nix-based distributed command runner
+// Copyright (C) 2026 Eric Rodrigues Pires
+//
+// This program is free software: you can redistribute it and/or modify it under
+// the terms of the GNU Affero General Public License as published by the Free
+// Software Foundation, either version 3 of the License, or (at your option)
+// any later version.
+//
+// This program is distributed in the hope that it will be useful, but WITHOUT
+// ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+// FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for
+// more details.
+//
+// You should have received a copy of the GNU Affero General Public License along
+// with this program. If not, see <https://www.gnu.org/licenses/>.
+
 use std::{
     collections::HashMap,
     ffi::OsString,
@@ -48,6 +64,9 @@ impl UnevenEnvironment {
         if let Some((_, path)) = std::env::vars_os().find(|(name, _)| name == "PATH") {
             command.env("PATH", path);
         }
+        if let Some((_, path)) = std::env::vars_os().find(|(name, _)| name == "HOME") {
+            command.env("HOME", path);
+        }
         command.envs(&step_env);
         let mut child = command.spawn()?;
 
@@ -70,8 +89,8 @@ impl UnevenEnvironment {
                 }
                 Ok(())
             });
-            stdout_task.join().expect("no panic")?;
-            stderr_task.join().expect("no panic")?;
+            stdout_task.join().expect("no panic in stdout task")?;
+            stderr_task.join().expect("no panic in stderr task")?;
             Ok(())
         });
 

@@ -184,7 +184,7 @@ in
         ]
         (
           { pkgs, ... }: {
-            name = "Build Docker";
+            name = "Push Docker";
             needs = [
               "build-docker"
             ];

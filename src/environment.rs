@@ -23,7 +23,7 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 
-use crate::secret::SecretString;
+use crate::{secret::SecretString, workflow::UnevenStepEnvVar};
 
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub(crate) struct UnevenEnvironment {
@@ -32,22 +32,24 @@ pub(crate) struct UnevenEnvironment {
     pub(crate) uploads: HashMap<String, PathBuf>,
 }
 
+#[derive(Debug, Default, Deserialize, Serialize)]
+struct UnevenEnvironmentInit {
+    #[serde(default)]
+    pub(crate) secrets: Vec<String>,
+    #[serde(default)]
+    pub(crate) vars: HashMap<String, String>,
+    #[serde(default)]
+    pub(crate) uploads: HashMap<String, PathBuf>,
+}
+
+static UNEVEN_ENVIRONMENT_KEY: &str = "UNEVEN_ENVIRONMENT";
+
 impl UnevenEnvironment {
     pub(crate) fn get() -> color_eyre::Result<UnevenEnvironment> {
-        #[derive(Debug, Deserialize)]
-        struct UnevenEnvironmentInit {
-            #[serde(default)]
-            pub(crate) secrets: Vec<String>,
-            #[serde(default)]
-            pub(crate) vars: HashMap<String, String>,
-            #[serde(default)]
-            pub(crate) uploads: HashMap<String, PathBuf>,
-        }
-
         let mut env_vars: HashMap<OsString, OsString> = std::env::vars_os().collect();
 
         let env: UnevenEnvironmentInit =
-            match env_vars.remove(OsStr::from_bytes("UNEVEN_ENVIRONMENT".as_bytes())) {
+            match env_vars.remove(OsStr::from_bytes(UNEVEN_ENVIRONMENT_KEY.as_bytes())) {
                 Some(value) => serde_json::from_slice(value.as_bytes())?,
                 None => return Ok(Default::default()),
             };
@@ -73,6 +75,46 @@ impl UnevenEnvironment {
             vars: env.vars,
             uploads: env.uploads,
         })
+    }
+
+    pub(crate) fn env_vars(
+        &self,
+        step_env: &HashMap<String, UnevenStepEnvVar>,
+    ) -> color_eyre::Result<impl Iterator<Item = (OsString, OsString)>> {
+        let mut env_init = UnevenEnvironmentInit {
+            uploads: self.uploads.clone(),
+            ..Default::default()
+        };
+
+        let mut map: HashMap<OsString, OsString> = HashMap::with_capacity(step_env.len() + 1);
+
+        for (key, value) in step_env {
+            match value {
+                UnevenStepEnvVar::Plain(value) => {
+                    env_init.vars.insert(key.clone(), value.clone());
+                }
+                UnevenStepEnvVar::Secret(secret) => {
+                    map.insert(
+                        key.into(),
+                        self.secrets
+                            .get(&secret.secret_name)
+                            .ok_or_else(|| {
+                                color_eyre::eyre::eyre!("Missing secret {}", &secret.secret_name)
+                            })?
+                            .get_secret_value()
+                            .into(),
+                    );
+                    env_init.secrets.push(secret.secret_name.clone());
+                }
+            }
+        }
+
+        map.insert(
+            UNEVEN_ENVIRONMENT_KEY.into(),
+            serde_json::to_string(&env_init)?.into(),
+        );
+
+        Ok(map.into_iter())
     }
 
     pub(crate) fn download(&self, name: &str) -> color_eyre::Result<&Path> {

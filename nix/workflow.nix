@@ -17,14 +17,13 @@
 {
   system ? builtins.currentSystem,
   pkgs ? import <nixpkgs> { inherit system; },
-  mkUneven ? pkgs':
-    (
-      import ./. {
-        pkgs = import <nixpkgs> {
-          inherit (pkgs'.stdenv.hostPlatform) system;
-        };
-      }
-    ).uneven,
+  mkUneven ?
+    pkgs':
+    (import ./. {
+      pkgs = import <nixpkgs> {
+        inherit (pkgs'.stdenv.hostPlatform) system;
+      };
+    }).uneven,
 }:
 
 let
@@ -61,63 +60,66 @@ let
         system-features = [ ];
       };
 
-  stepFn = pkgs': step:
-  let
-    inherit (pkgs')
-      writeShellApplication
-      writeTextFile
-      ;
-    script =
-      text:
-      writeTextFile {
-        name = "uneven-step-script";
-        text = ''
-          #! ${lib.getExe (if step.shell == null then pkgs'.bash else step.shell)} ${
-            lib.optionalString (step.shellArgs != null) (lib.escapeShellArgs step.shellArgs)
-          }
-          ${text}
-        '';
-        executable = true;
-      };
-  in
-  {
-    runDrv = (writeShellApplication {
-      name = "uneven-step";
-      runtimeInputs = [ (mkUneven pkgs') ] ++ step.path;
-      text = ''
-        uneven step \
-          --derivation ${script step.run} \
-          --env ${lib.strings.escapeShellArg (builtins.toJSON step.env)}
-      '';
-    }).drvPath;
+  stepFn =
+    name: pkgs': env: step:
+    let
+      inherit (pkgs')
+        writeShellApplication
+        writeTextFile
+        ;
+      script =
+        text:
+        writeTextFile {
+          name = "uneven-step-script";
+          text = ''
+            #! ${lib.getExe (if step.shell == null then pkgs'.bash else step.shell)} ${
+              lib.optionalString (step.shellArgs != null) (lib.escapeShellArgs step.shellArgs)
+            }
+            ${text}
+          '';
+          executable = true;
+        };
+    in
+    {
+      name = if (step.name != null && step.name != "") then step.name else name;
 
-    teardownDrv =
-      if step.teardown == null then
-        null
-      else
+      runDrv =
         (writeShellApplication {
-          name = "uneven-step-teardown";
+          name = "uneven-step";
           runtimeInputs = [ (mkUneven pkgs') ] ++ step.path;
           text = ''
             uneven step \
-              --teardown \
-              --derivation ${script step.teardown} \
+              --derivation ${script step.run} \
               --env ${lib.strings.escapeShellArg (builtins.toJSON step.env)}
           '';
         }).drvPath;
 
-    env = step.env;
+      teardownDrv =
+        if step.teardown == null then
+          null
+        else
+          (writeShellApplication {
+            name = "uneven-step";
+            runtimeInputs = [ (mkUneven pkgs') ] ++ step.path;
+            text = ''
+              uneven step \
+                --teardown \
+                --derivation ${script step.teardown} \
+                --env ${lib.strings.escapeShellArg (builtins.toJSON step.env)}
+            '';
+          }).drvPath;
 
-    __unevenUploadKey = step.__unevenUploadKey or null;
-  };
+      env = env // step.env;
+
+      __unevenUploadKey = step.__unevenUploadKey or null;
+    };
 
   unevenConfig =
     module:
     module.config
     // {
-      inherit system;
       jobs = builtins.mapAttrs (
-        _: job':
+        jobName: job':
         mapMaybeList (
           {
             job,
@@ -126,10 +128,11 @@ let
           }:
           job
           // {
+            name = if (job.name != null && job.name != "") then job.name else jobName;
             buildSystem = pkgs'.stdenv.buildPlatform.system;
             hostSystem = pkgs'.stdenv.hostPlatform.system;
             inherit system-features;
-            steps = map (stepFn pkgs') job.steps;
+            steps = lib.imap0 (i: stepFn "${jobName}-${toString i}" pkgs' job.env) job.steps;
           }
         ) job'
       ) module.config.jobs;
@@ -152,8 +155,7 @@ let
           description = "Jobs in the workflow.";
         };
       };
-    }
-  ;
+    };
 in
 
 workflow: env:

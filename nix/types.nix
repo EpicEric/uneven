@@ -18,6 +18,16 @@
 let
   inherit (lib) types;
 
+  env = types.attrsOf (
+    types.either types.str (
+      types.submodule {
+        options = {
+          __unevenSecret = lib.mkOption { type = types.str; };
+        };
+      }
+    )
+  );
+
   step = types.submodule {
     options = {
       name = lib.mkOption {
@@ -51,17 +61,9 @@ let
         description = "Packages added to the PATH of the script.";
       };
       env = lib.mkOption {
-        type = types.attrsOf (
-          types.either types.str (
-            types.submodule {
-              options = {
-                __unevenSecret = lib.mkOption { type = types.str; };
-              };
-            }
-          )
-        );
+        type = env;
         default = { };
-        description = "Environment values to make available to the script.";
+        description = "Environment values to make available to this step.";
       };
       __unevenUploadKey = lib.mkOption {
         type = types.nullOr types.str;
@@ -95,6 +97,11 @@ let
         type = types.nullOr (types.listOf types.str);
         default = null;
         description = "Jobs that must be completed before running this one.";
+      };
+      env = lib.mkOption {
+        type = env;
+        default = { };
+        description = "Environment values to make available to steps in this job.";
       };
       steps = lib.mkOption {
         type = types.listOf (types.nullOr step);

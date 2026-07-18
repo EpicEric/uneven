@@ -25,7 +25,9 @@ use color_eyre::eyre::eyre;
 
 use crate::environment::UnevenEnvironment;
 
+mod builder;
 mod environment;
+mod job;
 mod project;
 mod secret;
 mod step;
@@ -34,7 +36,7 @@ mod workflow;
 #[doc(hidden)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
 pub(crate) enum CheckoutStrategy {
-    Git,
+    Default,
 }
 
 #[derive(Parser)]
@@ -47,7 +49,7 @@ enum Command {
         #[arg(
             long,
             value_enum,
-            default_value_t = CheckoutStrategy::Git,
+            default_value_t = CheckoutStrategy::Default,
             value_name = "STRATEGY",
         )]
         checkout: CheckoutStrategy,
