@@ -25,7 +25,7 @@ use owo_colors::{OwoColorize, Style};
 
 use crate::{
     CheckoutStrategy,
-    builder::{LocalBuilder, UnevenBuilder},
+    builder::{LocalBuilder, RemoteBuilder, UnevenBuilder},
     environment::UnevenEnvironment,
     workflow::{UnevenJob, UnevenStepEnvVar},
 };
@@ -67,7 +67,7 @@ impl UnevenEnvironment {
                 }
                 builder.download(&downloads)?;
                 let (mut child, mut reader) =
-                    builder.run_derivation(&cwdir, run, self.env_vars(&step.env)?)?;
+                    builder.run_derivation(&cwdir, run, self.env_vars_for_step(&step.env)?)?;
                 if let Some(upload_key) = step.upload_key.as_ref() {
                     let mut buf = Vec::new();
                     reader.read_to_end(&mut buf)?;
@@ -110,7 +110,7 @@ impl UnevenEnvironment {
 
         for (step_name, teardown, step_env) in teardown_stack.into_iter().rev() {
             let (mut child, reader) =
-                builder.run_derivation(&cwdir, teardown, self.env_vars(step_env)?)?;
+                builder.run_derivation(&cwdir, teardown, self.env_vars_for_step(step_env)?)?;
             for line in BufReader::new(reader).lines() {
                 if let Ok(line) = line {
                     eprintln!(
@@ -153,9 +153,26 @@ impl UnevenEnvironment {
             Style::new().cyan(),
             Style::new().purple(),
             Style::new().red(),
-        ]
-        .iter()
-        .cycle();
-        todo!("run jobs on remotes")
+        ];
+        let mut result = Ok(());
+        for (job, style) in jobs.into_iter().zip(styles.iter().cycle()) {
+            let fail_fast = job.strategy.is_none_or(|strategy| strategy.fail_fast);
+            if let Err(error) = self.run_job(
+                RemoteBuilder {
+                    ssh_user: todo!(),
+                    ssh_host: todo!(),
+                },
+                *style,
+                job,
+                strategy,
+            ) {
+                if fail_fast {
+                    return Err(error);
+                } else {
+                    result = Err(error);
+                }
+            }
+        }
+        result
     }
 }

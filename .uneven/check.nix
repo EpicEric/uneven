@@ -165,7 +165,7 @@ in
             steps = [
               (lib.mkIf (pkgs.stdenv.hostPlatform.isLinux) (
                 runner.steps.upload "docker-${pkgs.stdenv.hostPlatform.system}" (
-                  pkgs.dockerTools.buildImage {
+                  pkgs.dockerTools.buildLayeredImage {
                     name = "uneven";
                     tag = "latest";
                     config.Entrypoint = [ (lib.getExe (mkUneven pkgs)) ];
@@ -205,9 +205,7 @@ in
               }
               {
                 name = "Login to GHCR";
-                env = {
-                  GITHUB_TOKEN = runner.secrets.GITHUB_TOKEN;
-                };
+                env.GITHUB_TOKEN = runner.secrets.GITHUB_TOKEN;
                 run = ''
                   echo $GITHUB_TOKEN | docker login --pasword-stdin --username ${runner.vars.GITHUB_USERNAME} ghcr.io
                 '';

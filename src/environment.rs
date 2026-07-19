@@ -15,10 +15,12 @@
 // with this program. If not, see <https://www.gnu.org/licenses/>.
 
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     ffi::{OsStr, OsString},
+    io::Write,
     os::unix::ffi::OsStrExt,
     path::{Path, PathBuf},
+    process::Command,
 };
 
 use serde::{Deserialize, Serialize};
@@ -44,14 +46,110 @@ struct UnevenEnvironmentInit {
 
 static UNEVEN_ENVIRONMENT_KEY: &str = "UNEVEN_ENVIRONMENT";
 
+struct ParsedWorkflow {
+    vars: HashSet<String>,
+    secrets: HashSet<String>,
+}
+
 impl UnevenEnvironment {
-    pub(crate) fn get() -> color_eyre::Result<UnevenEnvironment> {
+    pub(crate) fn get_for_workflow(
+        workflow: &Path,
+        env_file: Option<&PathBuf>,
+    ) -> color_eyre::Result<UnevenEnvironment> {
+        let mut env_vars: HashMap<OsString, OsString> = HashMap::new();
+        if let Some(env_file) = env_file {
+            env_vars.extend(
+                dotenvy::from_path_iter(env_file)?.filter_map(|result| {
+                    result.ok().map(|(key, value)| (key.into(), value.into()))
+                }),
+            );
+        };
+        env_vars.extend(std::env::vars_os());
+
+        let parsed_workflow = Self::parse_workflow(workflow)?;
+
+        let secrets: color_eyre::Result<HashMap<String, SecretString>> = parsed_workflow
+            .secrets
+            .into_iter()
+            .map(
+                |secret| match env_vars.remove(OsStr::from_bytes(secret.as_bytes())) {
+                    Some(value) => {
+                        let value = SecretString::new(value.into_string().map_err(|_| {
+                            color_eyre::eyre::eyre!("Invalid value for {secret} envvar")
+                        })?);
+                        Ok((secret, value))
+                    }
+                    None => Err(color_eyre::eyre::eyre!("Missing {secret} envvar")),
+                },
+            )
+            .collect();
+
+        let vars: color_eyre::Result<HashMap<String, String>> = parsed_workflow
+            .vars
+            .into_iter()
+            .map(
+                |var| match env_vars.remove(OsStr::from_bytes(var.as_bytes())) {
+                    Some(value) => {
+                        let value = value.into_string().map_err(|_| {
+                            color_eyre::eyre::eyre!("Invalid value for {var} envvar")
+                        })?;
+                        Ok((var, value))
+                    }
+                    None => Err(color_eyre::eyre::eyre!("Missing {var} envvar")),
+                },
+            )
+            .collect();
+
+        Ok(Self {
+            secrets: secrets?,
+            vars: vars?,
+            uploads: Default::default(),
+        })
+    }
+
+    fn parse_workflow(workflow: &Path) -> color_eyre::Result<ParsedWorkflow> {
+        let mut command = Command::new("nix-instantiate");
+        command.args(["--parse", "--keep-derivations"]);
+        let output = command.arg(workflow).output()?;
+
+        if !output.status.success() {
+            let mut stderr = std::io::stderr();
+            stderr.write_all(&output.stderr)?;
+            stderr.flush()?;
+            return Err(color_eyre::eyre::eyre!("Failed to parse uneven workflow"));
+        }
+        let stdout = String::from_utf8(output.stdout)?;
+
+        let vars_regex =
+            regex::Regex::new(r#"\(runner\)\.vars\.("[^"]+"|[A-Za-z_][A-Za-z0-9_-]*)"#)
+                .expect("valid regex");
+        let vars: HashSet<String> = vars_regex
+            .captures_iter(&stdout)
+            .map(|needle| needle.get(1).expect("is match").as_str().to_string())
+            .collect();
+
+        let secrets_regex =
+            regex::Regex::new(r#"\(runner\)\.secrets\.("[^"]+"|[A-Za-z_][A-Za-z0-9_-]*)"#)
+                .expect("valid regex");
+        let secrets: HashSet<String> = secrets_regex
+            .captures_iter(&stdout)
+            .map(|needle| needle.get(1).expect("is match").as_str().to_string())
+            .collect();
+
+        Ok(ParsedWorkflow { vars, secrets })
+    }
+
+    pub(crate) fn get_for_step() -> color_eyre::Result<UnevenEnvironment> {
         let mut env_vars: HashMap<OsString, OsString> = std::env::vars_os().collect();
 
         let env: UnevenEnvironmentInit =
             match env_vars.remove(OsStr::from_bytes(UNEVEN_ENVIRONMENT_KEY.as_bytes())) {
                 Some(value) => serde_json::from_slice(value.as_bytes())?,
-                None => return Ok(Default::default()),
+                None => {
+                    return Err(color_eyre::eyre::eyre!(
+                        "Missing {UNEVEN_ENVIRONMENT_KEY} envvar"
+                    ));
+                }
             };
 
         let secrets: color_eyre::Result<HashMap<String, SecretString>> = env
@@ -77,7 +175,7 @@ impl UnevenEnvironment {
         })
     }
 
-    pub(crate) fn env_vars(
+    pub(crate) fn env_vars_for_step(
         &self,
         step_env: &HashMap<String, UnevenStepEnvVar>,
     ) -> color_eyre::Result<impl Iterator<Item = (OsString, OsString)>> {
@@ -134,12 +232,5 @@ impl UnevenEnvironment {
         );
 
         Ok(map.into_iter())
-    }
-
-    pub(crate) fn download(&self, name: &str) -> color_eyre::Result<&Path> {
-        self.uploads
-            .get(name)
-            .map(|path| path.as_ref())
-            .ok_or_else(|| color_eyre::eyre::eyre!("Missing upload key '{name}'"))
     }
 }

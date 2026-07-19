@@ -45,6 +45,8 @@ enum Command {
     Run {
         workflow: PathBuf,
         #[arg(long)]
+        env_file: Option<PathBuf>,
+        #[arg(long)]
         eval: bool,
         #[arg(
             long,
@@ -75,10 +77,12 @@ fn main() -> color_eyre::Result<()> {
     match Command::parse() {
         Command::Run {
             workflow,
+            env_file,
             eval,
             checkout,
         } => {
-            let mut environment = UnevenEnvironment::get()?;
+            let mut environment =
+                UnevenEnvironment::get_for_workflow(&workflow, env_file.as_ref())?;
             environment.run_workflow(workflow, eval, checkout)?;
         }
         Command::Completions { shell } => {
@@ -94,7 +98,7 @@ fn main() -> color_eyre::Result<()> {
             env,
             teardown,
         } => {
-            let environment = UnevenEnvironment::get()?;
+            let environment = UnevenEnvironment::get_for_step()?;
             environment.run_step(derivation, teardown, &serde_json::from_str(&env)?)?;
         }
         Command::Build { derivation } => {
