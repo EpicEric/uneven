@@ -106,6 +106,25 @@ impl UnevenEnvironment {
                     );
                     env_init.secrets.push(secret.secret_name.clone());
                 }
+                UnevenStepEnvVar::Download(download) => {
+                    let download_path =
+                        self.uploads.get(&download.download_name).ok_or_else(|| {
+                            color_eyre::eyre::eyre!("Missing download {}", &download.download_name)
+                        })?;
+                    map.insert(key.into(), download_path.into());
+                    env_init.vars.insert(
+                        key.into(),
+                        download_path
+                            .to_str()
+                            .ok_or_else(|| {
+                                color_eyre::eyre::eyre!(
+                                    "Invalid UTF-8 for download path of {}",
+                                    &download.download_name
+                                )
+                            })?
+                            .into(),
+                    );
+                }
             }
         }
 

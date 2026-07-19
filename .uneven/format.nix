@@ -5,11 +5,11 @@
       name = "Fix formatting";
       steps = [
         {
-          name = "Run rustfmt";
+          # name = "Run rustfmt";
           run = ''
             echo "Hello, world!"
             cargo fmt --all
-            nixfmt .
+            treefmt
           '';
           teardown = ''
             echo "Tearing down 'Fix formatting'..."
@@ -17,7 +17,7 @@
           path = [
             pkgs.cargo
             pkgs.rustfmt
-            pkgs.nixfmt
+            pkgs.nixfmt-tree
           ];
         }
       ];

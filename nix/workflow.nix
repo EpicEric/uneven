@@ -213,6 +213,10 @@ unevenConfig (
               __unevenUploadKey = name;
             };
         };
+
+        download = name: {
+          __unevenDownload = name;
+        };
       };
     };
   }

@@ -16,7 +16,7 @@
 
 use std::{
     ffi::{OsStr, OsString},
-    io::Write,
+    io::{PipeReader, Write},
     os::unix::ffi::OsStrExt,
     path::{Path, PathBuf},
     process::{Child, Command, Stdio},
@@ -31,12 +31,14 @@ pub(crate) trait UnevenBuilder {
 
     fn realize_derivation(&self, derivation: &Path) -> color_eyre::Result<PathBuf>;
 
+    fn download(&self, downloads: &[&Path]) -> color_eyre::Result<()>;
+
     fn run_derivation(
         &self,
         cwdir: &Path,
         derivation: PathBuf,
         envs: impl Iterator<Item = (OsString, OsString)>,
-    ) -> color_eyre::Result<Child>;
+    ) -> color_eyre::Result<(Child, PipeReader)>;
 
     fn fetch_derivation(&self, derivation: &Path) -> color_eyre::Result<()>;
 }
@@ -75,23 +77,28 @@ impl UnevenBuilder for LocalBuilder {
         )))
     }
 
+    fn download(&self, _downloads: &[&Path]) -> color_eyre::Result<()> {
+        Ok(())
+    }
+
     fn run_derivation(
         &self,
         cwdir: &Path,
         mut derivation: PathBuf,
         envs: impl Iterator<Item = (OsString, OsString)>,
-    ) -> color_eyre::Result<Child> {
+    ) -> color_eyre::Result<(Child, PipeReader)> {
         derivation.push("bin");
         derivation.push("uneven-step");
 
-        Ok(Command::new(&derivation)
+        let mut command = Command::new(&derivation);
+        let (reader, writer) = std::io::pipe()?;
+        command
             .current_dir(cwdir)
             .stdin(Stdio::null())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .env_clear()
-            .envs(envs)
-            .spawn()?)
+            .stdout(writer.try_clone()?)
+            .stderr(writer)
+            .envs(envs);
+        Ok((command.spawn()?, reader))
     }
 
     fn fetch_derivation(&self, _derivation: &Path) -> color_eyre::Result<()> {
@@ -113,7 +120,7 @@ impl RemoteBuilder {
 impl UnevenBuilder for RemoteBuilder {
     fn checkout(&self, strategy: CheckoutStrategy) -> color_eyre::Result<PathBuf> {
         match strategy {
-            CheckoutStrategy::Default => todo!(),
+            CheckoutStrategy::Default => todo!("copy files over to remote"),
         }
     }
 
@@ -179,13 +186,41 @@ impl UnevenBuilder for RemoteBuilder {
         )))
     }
 
+    fn download(&self, downloads: &[&Path]) -> color_eyre::Result<()> {
+        let mut command = Command::new("nix");
+        command.args([
+            "--extra-experimental-features",
+            "nix-command",
+            "copy",
+            "--to",
+        ]);
+        command.arg(self.ssh_remote());
+        command.args(downloads);
+
+        let output = command.output()?;
+        if !output.status.success() {
+            let mut stderr = std::io::stderr();
+            stderr.write_all(&output.stderr)?;
+            stderr.flush()?;
+            return Err(color_eyre::eyre::eyre!(
+                "Failed to copy uploads to {}",
+                self.ssh_remote()
+            ));
+        }
+
+        Ok(())
+    }
+
     fn run_derivation(
         &self,
         cwdir: &Path,
-        derivation: PathBuf,
+        mut derivation: PathBuf,
         envs: impl Iterator<Item = (OsString, OsString)>,
-    ) -> color_eyre::Result<Child> {
-        todo!()
+    ) -> color_eyre::Result<(Child, PipeReader)> {
+        derivation.push("bin");
+        derivation.push("uneven-step");
+
+        todo!("run derivation on remote")
     }
 
     fn fetch_derivation(&self, derivation: &Path) -> color_eyre::Result<()> {

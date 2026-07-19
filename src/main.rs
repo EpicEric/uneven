@@ -69,10 +69,6 @@ enum Command {
         #[arg(long)]
         derivation: PathBuf,
     },
-    Download {
-        #[arg(long)]
-        name: String,
-    },
 }
 
 fn main() -> color_eyre::Result<()> {
@@ -109,13 +105,6 @@ fn main() -> color_eyre::Result<()> {
             } else {
                 return Err(eyre!("Failed to build {}", derivation.to_string_lossy()));
             }
-        }
-        Command::Download { name } => {
-            let environment = UnevenEnvironment::get()?;
-            let path = environment.download(&name)?;
-            let mut stdout = stdout();
-            stdout.write_all(path.as_os_str().as_bytes())?;
-            stdout.flush()?;
         }
     }
     Ok(())

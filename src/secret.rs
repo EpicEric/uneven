@@ -74,7 +74,6 @@ impl SecretStringCollection {
         self.0.insert(index, secret);
     }
 
-    // TODO: Check if this is susceptible to timing attacks
     pub(crate) fn anonymize(&self, input: &str) -> String {
         let mut output = input.to_string();
         for secret in self.0.iter() {

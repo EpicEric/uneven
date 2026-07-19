@@ -565,6 +565,7 @@ dependencies = [
  "clap_complete",
  "color-eyre",
  "include_dir",
+ "owo-colors",
  "petgraph",
  "serde",
  "serde_json",

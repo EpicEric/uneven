@@ -45,6 +45,7 @@ in
           '';
           path = [
             pkgs.cargo
+            pkgs.rustfmt
           ];
         }
       ];
@@ -234,14 +235,13 @@ in
                       }
                     )
                   );
+                  AMD_IMAGE = runner.download "docker-x86_64-linux";
+                  ARM_IMAGE = runner.download "docker-aarch64-linux";
                 };
                 run = ''
-                  amd_image=$(uneven download --name docker-x86_64-linux)
-                  arm_image=$(uneven download --name docker-aarch64-linux)
-
                   for TAG in $TAGS; do
-                    skopeo copy docker-archive:$amd_image "docker://$TAG-amd64"
-                    skopeo copy docker-archive:$arm_image "docker://$TAG-arm64"
+                    skopeo copy docker-archive:$AMD_IMAGE "docker://$TAG-amd64"
+                    skopeo copy docker-archive:$ARM_IMAGE "docker://$TAG-arm64"
                     docker buildx imagetools create --tag "$TAG" "$TAG-amd64" "$TAG-arm64"
                   done
                 '';

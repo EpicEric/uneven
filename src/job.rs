@@ -14,19 +14,27 @@
 // You should have received a copy of the GNU Affero General Public License along
 // with this program. If not, see <https://www.gnu.org/licenses/>.
 
-use std::{ffi::OsStr, io::Read, os::unix::ffi::OsStrExt, path::PathBuf};
+use std::{
+    ffi::OsStr,
+    io::{BufRead, BufReader, Read},
+    os::unix::ffi::OsStrExt,
+    path::{Path, PathBuf},
+};
+
+use owo_colors::{OwoColorize, Style};
 
 use crate::{
     CheckoutStrategy,
     builder::{LocalBuilder, UnevenBuilder},
     environment::UnevenEnvironment,
-    workflow::UnevenJob,
+    workflow::{UnevenJob, UnevenStepEnvVar},
 };
 
 impl UnevenEnvironment {
     fn run_job(
         &mut self,
         builder: impl UnevenBuilder,
+        style: Style,
         job: UnevenJob,
         strategy: CheckoutStrategy,
     ) -> color_eyre::Result<()> {
@@ -35,9 +43,6 @@ impl UnevenEnvironment {
         let cwdir = builder.checkout(strategy)?;
         builder.copy_derivations(&job)?;
         let mut teardown_stack = Vec::new();
-        for (_, upload) in self.uploads.iter() {
-            builder.fetch_derivation(upload)?;
-        }
 
         let mut result = Ok(());
         for step in job.steps.iter() {
@@ -47,17 +52,44 @@ impl UnevenEnvironment {
                     teardown_stack.push((&step.name, teardown, &step.env));
                 }
                 let run = builder.realize_derivation(&step.run_drv)?;
-                let mut child = builder.run_derivation(&cwdir, run, self.env_vars(&step.env)?)?;
+                let mut downloads: Vec<&Path> = Vec::new();
+                for (_, env) in &step.env {
+                    if let UnevenStepEnvVar::Download(download) = env {
+                        if let Some(path) = self.uploads.get(&download.download_name) {
+                            downloads.push(path);
+                        } else {
+                            return Err(color_eyre::eyre::eyre!(
+                                "No upload named '{}'",
+                                &download.download_name,
+                            ));
+                        }
+                    }
+                }
+                builder.download(&downloads)?;
+                let (mut child, mut reader) =
+                    builder.run_derivation(&cwdir, run, self.env_vars(&step.env)?)?;
                 if let Some(upload_key) = step.upload_key.as_ref() {
-                    let mut stdout = child.stdout.take().expect("stdout is piped");
                     let mut buf = Vec::new();
-                    stdout.read_to_end(&mut buf)?;
-                    self.uploads.insert(
-                        upload_key.clone(),
-                        PathBuf::from(OsStr::from_bytes(buf.trim_ascii())),
+                    reader.read_to_end(&mut buf)?;
+                    let upload_path = PathBuf::from(OsStr::from_bytes(buf.trim_ascii()));
+                    builder.fetch_derivation(&upload_path)?;
+                    eprintln!(
+                        "{} Uploaded {} ({})",
+                        format!("| Run '{}' |", step.name).style(style),
+                        upload_key,
+                        upload_path.to_string_lossy(),
                     );
+                    self.uploads.insert(upload_key.clone(), upload_path);
                 } else {
-                    // TODO
+                    for line in BufReader::new(reader).lines() {
+                        if let Ok(line) = line {
+                            eprintln!(
+                                "{} {}",
+                                format!("| Run '{}' |", step.name).style(style),
+                                line,
+                            );
+                        }
+                    }
                 }
                 let exit_status = child.wait()?;
                 if exit_status.success() {
@@ -77,8 +109,17 @@ impl UnevenEnvironment {
         }
 
         for (step_name, teardown, step_env) in teardown_stack.into_iter().rev() {
-            let mut child = builder.run_derivation(&cwdir, teardown, self.env_vars(step_env)?)?;
-            // TODO
+            let (mut child, reader) =
+                builder.run_derivation(&cwdir, teardown, self.env_vars(step_env)?)?;
+            for line in BufReader::new(reader).lines() {
+                if let Ok(line) = line {
+                    eprintln!(
+                        "{} {}",
+                        format!("| Teardown '{}' |", step_name).style(style),
+                        line
+                    );
+                }
+            }
             let exit_status = child.wait()?;
             if !exit_status.success() {
                 return Err(color_eyre::eyre::eyre!(
@@ -97,7 +138,7 @@ impl UnevenEnvironment {
         job: UnevenJob,
         strategy: CheckoutStrategy,
     ) -> color_eyre::Result<()> {
-        self.run_job(LocalBuilder, job, strategy)
+        self.run_job(LocalBuilder, Style::new().blue(), job, strategy)
     }
 
     pub(crate) fn run_jobs_remote(
@@ -105,6 +146,16 @@ impl UnevenEnvironment {
         jobs: Vec<UnevenJob>,
         strategy: CheckoutStrategy,
     ) -> color_eyre::Result<()> {
-        todo!()
+        let styles = [
+            Style::new().yellow(),
+            Style::new().magenta(),
+            Style::new().green(),
+            Style::new().cyan(),
+            Style::new().purple(),
+            Style::new().red(),
+        ]
+        .iter()
+        .cycle();
+        todo!("run jobs on remotes")
     }
 }

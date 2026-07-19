@@ -16,7 +16,6 @@
 
 use std::{
     collections::HashMap,
-    ffi::OsString,
     io::{self, BufRead, BufReader, Write},
     path::PathBuf,
     process::{Command, Stdio},
@@ -34,40 +33,26 @@ impl UnevenEnvironment {
         teardown: bool,
         env: &HashMap<String, UnevenStepEnvVar>,
     ) -> color_eyre::Result<()> {
-        let mut step_env: HashMap<OsString, OsString> = HashMap::new();
         let mut secrets: SecretStringCollection = SecretStringCollection::new();
 
-        for (key, value) in env {
-            let value = match value {
-                UnevenStepEnvVar::Plain(value) => value.into(),
-                UnevenStepEnvVar::Secret(secret) => {
-                    let Some(secret) = self.secrets.get(&secret.secret_name) else {
-                        return Err(color_eyre::eyre::eyre!(
-                            "Unknown secret {}",
-                            secret.secret_name
-                        ));
-                    };
-                    let secret = secret.get_secret_value();
-                    secrets.push(secret.to_string());
-                    secret.into()
-                }
+        for (_, value) in env {
+            let UnevenStepEnvVar::Secret(secret) = value else {
+                continue;
             };
-            step_env.insert(key.into(), value);
+            let Some(secret) = self.secrets.get(&secret.secret_name) else {
+                return Err(color_eyre::eyre::eyre!(
+                    "Unknown secret {}",
+                    secret.secret_name
+                ));
+            };
+            secrets.push(secret.get_secret_value().to_string());
         }
 
         let mut command = Command::new(&derivation);
         command
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .env_clear();
-        if let Some((_, path)) = std::env::vars_os().find(|(name, _)| name == "PATH") {
-            command.env("PATH", path);
-        }
-        if let Some((_, path)) = std::env::vars_os().find(|(name, _)| name == "HOME") {
-            command.env("HOME", path);
-        }
-        command.envs(&step_env);
+            .stderr(Stdio::piped());
         let mut child = command.spawn()?;
 
         let stdout = child.stdout.take().expect("stdout is piped");

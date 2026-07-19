@@ -76,12 +76,19 @@ pub(crate) struct UnevenStep {
 pub(crate) enum UnevenStepEnvVar {
     Plain(String),
     Secret(UnevenStepSecret),
+    Download(UnevenStepDownload),
 }
 
 #[derive(Clone, Debug, Deserialize)]
 pub(crate) struct UnevenStepSecret {
     #[serde(rename = "__unevenSecret")]
     pub(crate) secret_name: String,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub(crate) struct UnevenStepDownload {
+    #[serde(rename = "__unevenDownload")]
+    pub(crate) download_name: String,
 }
 
 impl UnevenEnvironment {
