@@ -25,7 +25,7 @@ use owo_colors::{OwoColorize, Style};
 
 use crate::{
     CheckoutStrategy,
-    builder::{LocalBuilder, RemoteBuilder, UnevenBuilder},
+    builder::{LocalBuilder, RemoteBuilder, UnevenBuilder, get_builder},
     environment::UnevenEnvironment,
     workflow::{UnevenJob, UnevenStepEnvVar},
 };
@@ -149,13 +149,9 @@ impl UnevenEnvironment {
         job: UnevenJob,
         strategy: CheckoutStrategy,
     ) -> color_eyre::Result<()> {
-        self.run_job(
-            LocalBuilder,
-            Style::new().blue(),
-            "local".into(),
-            job,
-            strategy,
-        )
+        let builder = LocalBuilder;
+        let builder_name = builder.name();
+        self.run_job(builder, Style::new().blue(), builder_name, job, strategy)
     }
 
     pub(crate) fn run_jobs_remote(
@@ -174,12 +170,10 @@ impl UnevenEnvironment {
         let mut result = Ok(());
         for (job, style) in jobs.into_iter().zip(styles.iter().cycle()) {
             let fail_fast = job.strategy.is_none_or(|strategy| strategy.fail_fast);
-            let remote_builder = RemoteBuilder {
-                ssh_user: todo!(),
-                ssh_host: todo!(),
-            };
-            let ssh_remote = remote_builder.ssh_remote();
-            if let Err(error) = self.run_job(remote_builder, *style, ssh_remote, job, strategy) {
+
+            let builder = get_builder(&job)?;
+            let builder_name = builder.name();
+            if let Err(error) = self.run_job(builder, *style, builder_name, job, strategy) {
                 if fail_fast {
                     return Err(error);
                 } else {

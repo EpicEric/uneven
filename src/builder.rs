@@ -24,7 +24,26 @@ use std::{
 
 use crate::{CheckoutStrategy, workflow::UnevenJob};
 
+pub(crate) fn get_builder(job: &UnevenJob) -> color_eyre::Result<Box<dyn UnevenBuilder>> {
+    if matches_local_builder(job) {
+        Ok(Box::new(LocalBuilder))
+    } else if let Some(builder) = RemoteBuilder::get_remote_builder(job)? {
+        Ok(Box::new(builder))
+    } else {
+        Err(color_eyre::eyre::eyre!(
+            "No builders match for job '{}'",
+            job.name
+        ))
+    }
+}
+
+fn matches_local_builder(job: &UnevenJob) -> bool {
+    todo!("matched local builder")
+}
+
 pub(crate) trait UnevenBuilder {
+    fn name(&self) -> String;
+
     fn checkout(&self, strategy: CheckoutStrategy) -> color_eyre::Result<PathBuf>;
 
     fn copy_derivations(&self, job: &UnevenJob) -> color_eyre::Result<()>;
@@ -37,7 +56,7 @@ pub(crate) trait UnevenBuilder {
         &self,
         cwdir: &Path,
         derivation: PathBuf,
-        envs: impl Iterator<Item = (OsString, OsString)>,
+        envs: HashMap<OsString, OsString>,
     ) -> color_eyre::Result<(Child, PipeReader)>;
 
     fn fetch_derivation(&self, derivation: &Path) -> color_eyre::Result<()>;
@@ -46,6 +65,10 @@ pub(crate) trait UnevenBuilder {
 pub(crate) struct LocalBuilder;
 
 impl UnevenBuilder for LocalBuilder {
+    fn name(&self) -> String {
+        "local".into()
+    }
+
     fn checkout(&self, strategy: CheckoutStrategy) -> color_eyre::Result<PathBuf> {
         match strategy {
             CheckoutStrategy::Default => Ok(std::env::current_dir()?),
@@ -85,7 +108,7 @@ impl UnevenBuilder for LocalBuilder {
         &self,
         cwdir: &Path,
         mut derivation: PathBuf,
-        envs: impl Iterator<Item = (OsString, OsString)>,
+        envs: HashMap<OsString, OsString>,
     ) -> color_eyre::Result<(Child, PipeReader)> {
         derivation.push("bin");
         derivation.push("uneven-step");
@@ -112,12 +135,20 @@ pub(crate) struct RemoteBuilder {
 }
 
 impl RemoteBuilder {
-    pub(crate) fn ssh_remote(&self) -> String {
+    fn get_remote_builder(job: &UnevenJob) -> color_eyre::Result<Option<Self>> {
+        todo!("get remote builder")
+    }
+
+    fn ssh_remote(&self) -> String {
         format!("ssh://{}@{}", self.ssh_user, self.ssh_host)
     }
 }
 
 impl UnevenBuilder for RemoteBuilder {
+    fn name(&self) -> String {
+        self.ssh_remote()
+    }
+
     fn checkout(&self, strategy: CheckoutStrategy) -> color_eyre::Result<PathBuf> {
         match strategy {
             CheckoutStrategy::Default => todo!("copy files over to remote"),
@@ -215,7 +246,7 @@ impl UnevenBuilder for RemoteBuilder {
         &self,
         cwdir: &Path,
         mut derivation: PathBuf,
-        envs: impl Iterator<Item = (OsString, OsString)>,
+        envs: HashMap<OsString, OsString>,
     ) -> color_eyre::Result<(Child, PipeReader)> {
         derivation.push("bin");
         derivation.push("uneven-step");

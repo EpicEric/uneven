@@ -178,7 +178,7 @@ impl UnevenEnvironment {
     pub(crate) fn env_vars_for_step(
         &self,
         step_env: &HashMap<String, UnevenStepEnvVar>,
-    ) -> color_eyre::Result<impl Iterator<Item = (OsString, OsString)>> {
+    ) -> color_eyre::Result<HashMap<OsString, OsString>> {
         let mut env_init = UnevenEnvironmentInit {
             uploads: self.uploads.clone(),
             ..Default::default()
@@ -231,6 +231,6 @@ impl UnevenEnvironment {
             serde_json::to_string(&env_init)?.into(),
         );
 
-        Ok(map.into_iter())
+        Ok(map)
     }
 }
