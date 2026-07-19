@@ -35,10 +35,15 @@ impl UnevenEnvironment {
         &mut self,
         builder: impl UnevenBuilder,
         style: Style,
+        runner: String,
         job: UnevenJob,
         strategy: CheckoutStrategy,
     ) -> color_eyre::Result<()> {
-        eprintln!("Running job '{}'...", &job.name);
+        eprintln!(
+            "{} Running job '{}'...",
+            format!("| Runner '{}' |", runner).blue(),
+            &job.name
+        );
 
         let cwdir = builder.checkout(strategy)?;
         builder.copy_derivations(&job)?;
@@ -75,7 +80,7 @@ impl UnevenEnvironment {
                     builder.fetch_derivation(&upload_path)?;
                     eprintln!(
                         "{} Uploaded {} ({})",
-                        format!("| Run '{}' |", step.name).style(style),
+                        format!("| Runner '{}' | Run '{}' |", runner, step.name).style(style),
                         upload_key,
                         upload_path.to_string_lossy(),
                     );
@@ -85,7 +90,8 @@ impl UnevenEnvironment {
                         if let Ok(line) = line {
                             eprintln!(
                                 "{} {}",
-                                format!("| Run '{}' |", step.name).style(style),
+                                format!("| Runner '{}' | Run '{}' |", runner, step.name)
+                                    .style(style),
                                 line,
                             );
                         }
@@ -115,14 +121,19 @@ impl UnevenEnvironment {
                 if let Ok(line) = line {
                     eprintln!(
                         "{} {}",
-                        format!("| Teardown '{}' |", step_name).style(style),
+                        format!("| Runner '{}' | Teardown '{}' |", runner, step_name).style(style),
                         line
                     );
                 }
             }
             let exit_status = child.wait()?;
             if !exit_status.success() {
-                return Err(color_eyre::eyre::eyre!(
+                eprintln!(
+                    "{} Teardown failed with exit code {}; continuing",
+                    format!("| Runner '{}' | Teardown '{}' |", runner, step_name).style(style),
+                    exit_status
+                );
+                result = Err(color_eyre::eyre::eyre!(
                     "Teardown for step '{}' failed with exit code {}",
                     step_name,
                     exit_status
@@ -138,7 +149,13 @@ impl UnevenEnvironment {
         job: UnevenJob,
         strategy: CheckoutStrategy,
     ) -> color_eyre::Result<()> {
-        self.run_job(LocalBuilder, Style::new().blue(), job, strategy)
+        self.run_job(
+            LocalBuilder,
+            Style::new().blue(),
+            "local".into(),
+            job,
+            strategy,
+        )
     }
 
     pub(crate) fn run_jobs_remote(
@@ -157,15 +174,12 @@ impl UnevenEnvironment {
         let mut result = Ok(());
         for (job, style) in jobs.into_iter().zip(styles.iter().cycle()) {
             let fail_fast = job.strategy.is_none_or(|strategy| strategy.fail_fast);
-            if let Err(error) = self.run_job(
-                RemoteBuilder {
-                    ssh_user: todo!(),
-                    ssh_host: todo!(),
-                },
-                *style,
-                job,
-                strategy,
-            ) {
+            let remote_builder = RemoteBuilder {
+                ssh_user: todo!(),
+                ssh_host: todo!(),
+            };
+            let ssh_remote = remote_builder.ssh_remote();
+            if let Err(error) = self.run_job(remote_builder, *style, ssh_remote, job, strategy) {
                 if fail_fast {
                     return Err(error);
                 } else {

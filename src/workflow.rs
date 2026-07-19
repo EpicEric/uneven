@@ -17,10 +17,11 @@
 use std::{
     collections::{HashMap, HashSet},
     io::Write,
-    path::PathBuf,
+    path::{Path, PathBuf},
     process::Command,
 };
 
+use owo_colors::OwoColorize;
 use petgraph::{acyclic::Acyclic, algo::Cycle, graph::DiGraph, matrix_graph::NodeIndex};
 use serde::Deserialize;
 
@@ -99,19 +100,26 @@ impl UnevenEnvironment {
         strategy: CheckoutStrategy,
     ) -> color_eyre::Result<()> {
         eprintln!(
-            "Evaluating workflow '{}'...",
-            workflow_path.to_string_lossy()
+            "{} Evaluating workflow...",
+            format!("| Eval '{}' |", workflow_path.to_string_lossy()).blue()
         );
-        let workflow = self.evaluate_workflow(workflow_path)?;
+        let workflow = self.evaluate_workflow(&workflow_path)?;
         if eval {
             println!("{:?}", &workflow);
             return Ok(());
         }
 
         if let Some(name) = workflow.name.as_ref() {
-            eprintln!("Building tree for workflow '{name}'...");
+            eprintln!(
+                "{} Building tree for '{}'...",
+                format!("| Eval '{}' |", workflow_path.to_string_lossy()).blue(),
+                name
+            );
         } else {
-            eprintln!("Building tree for workflow...");
+            eprintln!(
+                "{} Building tree...",
+                format!("| Eval '{}' |", workflow_path.to_string_lossy()).blue()
+            );
         }
         let mut tree = workflow.build_graph()?;
 
@@ -148,7 +156,7 @@ impl UnevenEnvironment {
         Ok(())
     }
 
-    fn evaluate_workflow(&self, workflow: PathBuf) -> color_eyre::Result<UnevenWorkflow> {
+    fn evaluate_workflow(&self, workflow: &Path) -> color_eyre::Result<UnevenWorkflow> {
         let workflow_canonical = std::fs::canonicalize(&workflow)?;
         let workflow_str = workflow_canonical
             .to_str()

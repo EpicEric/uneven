@@ -16,11 +16,12 @@
 
 use std::{
     collections::HashMap,
-    io::{self, BufRead, BufReader, Write},
+    io::{BufRead, BufReader},
     path::PathBuf,
-    process::{Command, Stdio},
-    thread::scope,
+    thread::spawn,
 };
+
+use portable_pty::{CommandBuilder, PtySize, native_pty_system};
 
 use crate::{
     environment::UnevenEnvironment, secret::SecretStringCollection, workflow::UnevenStepEnvVar,
@@ -30,7 +31,6 @@ impl UnevenEnvironment {
     pub(crate) fn run_step(
         &self,
         derivation: PathBuf,
-        teardown: bool,
         env: &HashMap<String, UnevenStepEnvVar>,
     ) -> color_eyre::Result<()> {
         let mut secrets: SecretStringCollection = SecretStringCollection::new();
@@ -48,37 +48,54 @@ impl UnevenEnvironment {
             secrets.push(secret.get_secret_value().to_string());
         }
 
-        let mut command = Command::new(&derivation);
-        command
-            .stdin(Stdio::null())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped());
-        let mut child = command.spawn()?;
+        let pty_system = native_pty_system();
 
-        let stdout = child.stdout.take().expect("stdout is piped");
-        let stderr = child.stderr.take().expect("stderr is piped");
+        let pair = pty_system
+            .openpty(PtySize {
+                rows: 24,
+                cols: 80,
+                pixel_width: 0,
+                pixel_height: 0,
+            })
+            .map_err(|error| color_eyre::eyre::eyre!("{error}"))?;
 
-        let secrets = &secrets;
-        let result: color_eyre::Result<()> = scope(move |s| {
-            let stdout_task = s.spawn::<_, color_eyre::Result<()>>(move || {
-                let mut parent_stdout = io::stdout();
-                for line in BufReader::new(stdout).lines() {
-                    parent_stdout.write_all(secrets.anonymize(&line?).as_bytes())?;
+        let mut command = CommandBuilder::new(&derivation);
+        for (key, value) in std::env::vars_os() {
+            command.env(key, value);
+        }
+        command.env("CI", "1");
+        command.env("NO_COLOR", "1");
+        command.cwd(std::env::current_dir()?);
+        let mut child = pair
+            .slave
+            .spawn_command(command)
+            .map_err(|error| color_eyre::eyre::eyre!("{error}"))?;
+        let reader = pair
+            .master
+            .try_clone_reader()
+            .map_err(|error| color_eyre::eyre::eyre!("{error}"))?;
+        drop(
+            pair.master
+                .take_writer()
+                .expect("writer has not been taken"),
+        );
+
+        spawn(|| {
+            for line in BufReader::new(reader).lines() {
+                if let Ok(line) = line {
+                    eprintln!("{line}");
                 }
-                Ok(())
-            });
-            let stderr_task = s.spawn::<_, color_eyre::Result<()>>(move || {
-                let mut parent_stderr = io::stderr();
-                for line in BufReader::new(stderr).lines() {
-                    parent_stderr.write_all(secrets.anonymize(&line?).as_bytes())?;
-                }
-                Ok(())
-            });
-            stdout_task.join().expect("no panic in stdout task")?;
-            stderr_task.join().expect("no panic in stderr task")?;
-            Ok(())
+            }
         });
 
-        if teardown { Ok(()) } else { result }
+        let status = child.wait()?;
+        if status.success() {
+            Ok(())
+        } else {
+            Err(color_eyre::eyre::eyre!(
+                "Step failed with exit code {}",
+                status
+            ))
+        }
     }
 }

@@ -112,7 +112,7 @@ pub(crate) struct RemoteBuilder {
 }
 
 impl RemoteBuilder {
-    fn ssh_remote(&self) -> String {
+    pub(crate) fn ssh_remote(&self) -> String {
         format!("ssh://{}@{}", self.ssh_user, self.ssh_host)
     }
 }

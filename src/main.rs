@@ -64,8 +64,6 @@ enum Command {
         derivation: PathBuf,
         #[arg(long)]
         env: String,
-        #[arg(long)]
-        teardown: bool,
     },
     Build {
         #[arg(long)]
@@ -93,13 +91,9 @@ fn main() -> color_eyre::Result<()> {
                 &mut std::io::stdout(),
             );
         }
-        Command::Step {
-            derivation,
-            env,
-            teardown,
-        } => {
+        Command::Step { derivation, env } => {
             let environment = UnevenEnvironment::get_for_step()?;
-            environment.run_step(derivation, teardown, &serde_json::from_str(&env)?)?;
+            environment.run_step(derivation, &serde_json::from_str(&env)?)?;
         }
         Command::Build { derivation } => {
             if derivation.exists() {

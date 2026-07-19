@@ -103,7 +103,6 @@ let
             runtimeInputs = [ (mkUneven pkgs') ] ++ step.path;
             text = ''
               uneven step \
-                --teardown \
                 --derivation ${script step.teardown} \
                 --env ${lib.strings.escapeShellArg (builtins.toJSON step.env)}
             '';
