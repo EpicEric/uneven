@@ -86,8 +86,10 @@ impl UnevenEnvironment {
                 .expect("writer has not been taken"),
         );
 
-        spawn(move || {
-            for line in BufReader::new(reader).lines() {
+        let jh = spawn(move || {
+            let mut lines = BufReader::new(reader).lines();
+            let _ = lines.next(); // First line is always empty
+            for line in lines {
                 if let Ok(line) = line {
                     eprintln!("{}", secrets.anonymize(&line));
                 } else {
@@ -97,13 +99,13 @@ impl UnevenEnvironment {
         });
 
         let status = child.wait()?;
+        drop(pair);
+        jh.join().expect("no panic in join handle");
+
         if status.success() {
             Ok(())
         } else {
-            Err(color_eyre::eyre::eyre!(
-                "Step failed with exit code {}",
-                status
-            ))
+            Err(color_eyre::eyre::eyre!("{}", status))
         }
     }
 }

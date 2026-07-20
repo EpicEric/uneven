@@ -1,3 +1,19 @@
+// uneven: A Nix-based distributed command runner
+// Copyright (C) 2026 Eric Rodrigues Pires
+//
+// This program is free software: you can redistribute it and/or modify it under
+// the terms of the GNU Affero General Public License as published by the Free
+// Software Foundation, either version 3 of the License, or (at your option)
+// any later version.
+//
+// This program is distributed in the hope that it will be useful, but WITHOUT
+// ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+// FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for
+// more details.
+//
+// You should have received a copy of the GNU Affero General Public License along
+// with this program. If not, see <https://www.gnu.org/licenses/>.
+
 use std::{
     collections::{HashMap, HashSet},
     ffi::{OsStr, OsString},
@@ -27,7 +43,10 @@ pub(crate) struct RemoteBuilder {
 }
 
 impl RemoteBuilder {
-    pub(crate) fn get_remote_builders(config: &NixConfig, strategy: CheckoutStrategy) -> color_eyre::Result<Vec<Self>> {
+    pub(crate) fn get_remote_builders(
+        config: &NixConfig,
+        strategy: CheckoutStrategy,
+    ) -> color_eyre::Result<Vec<Self>> {
         let builders = if let Some(file) = config.builders.value.strip_prefix('@') {
             if !std::fs::exists(file)? {
                 return Ok(vec![]);
@@ -300,7 +319,7 @@ impl UnevenBuilder for RemoteBuilder {
         Ok(())
     }
 
-    fn uncheckout(&self, path: &Path) -> color_eyre::Result<()> {
+    fn undo_checkout(&self, path: &Path) -> color_eyre::Result<()> {
         match self.strategy {
             CheckoutStrategy::Default => {
                 let mut rm_command: OsString = "rm -rf ".into();

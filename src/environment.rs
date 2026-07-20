@@ -109,6 +109,7 @@ impl UnevenEnvironment {
         })
     }
 
+    // TODO: Improve brittle logic of this function
     fn parse_workflow(workflow: &Path) -> color_eyre::Result<ParsedWorkflow> {
         let mut command = Command::new("nix-instantiate");
         command.args(["--parse", "--keep-derivations"]);
@@ -118,7 +119,7 @@ impl UnevenEnvironment {
             let mut stderr = std::io::stderr();
             stderr.write_all(&output.stderr)?;
             stderr.flush()?;
-            return Err(color_eyre::eyre::eyre!("Failed to parse uneven workflow"));
+            return Err(color_eyre::eyre::eyre!("Failed to parse workflow"));
         }
         let stdout = String::from_utf8(output.stdout)?;
 

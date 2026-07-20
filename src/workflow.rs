@@ -110,8 +110,9 @@ impl UnevenEnvironment {
         let style = builder.get_style();
 
         eprintln!(
-            "{} Evaluating workflow...",
-            format!("| Eval '{}' |", workflow_path.to_string_lossy()).style(style)
+            "{} Evaluating workflow '{}'...",
+            format!("{}>", builder.get_name()).style(style),
+            workflow_path.to_string_lossy()
         );
         let workflow = self.evaluate_workflow(&workflow_path)?;
         if eval {
@@ -122,13 +123,13 @@ impl UnevenEnvironment {
         if let Some(name) = workflow.name.as_ref() {
             eprintln!(
                 "{} Building tree for '{}'...",
-                format!("| Eval '{}' |", workflow_path.to_string_lossy()).style(style),
+                format!("{}>", builder.get_name()).style(style),
                 name
             );
         } else {
             eprintln!(
-                "{} Building tree...",
-                format!("| Eval '{}' |", workflow_path.to_string_lossy()).style(style)
+                "{} Building tree for workflow...",
+                format!("{}>", builder.get_name()).style(style)
             );
         }
         let mut tree = workflow.build_graph()?;
@@ -206,9 +207,7 @@ impl UnevenEnvironment {
             let mut stderr = std::io::stderr();
             stderr.write_all(&output.stderr)?;
             stderr.flush()?;
-            return Err(color_eyre::eyre::eyre!(
-                "Failed to evaluate uneven workflow"
-            ));
+            return Err(color_eyre::eyre::eyre!("Failed to evaluate workflow"));
         }
 
         Ok(serde_json::from_slice(&output.stdout)?)

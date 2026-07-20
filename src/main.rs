@@ -75,11 +75,17 @@ enum Command {
 fn main() -> color_eyre::Result<()> {
     match Command::parse() {
         Command::Run {
-            workflow,
+            mut workflow,
             env_file,
             eval,
             checkout,
         } => {
+            if workflow.is_dir() {
+                workflow.push("default.nix");
+            }
+            if !workflow.exists() {
+                return Err(eyre!("Workflow '{}' not found", workflow.to_string_lossy()));
+            }
             let mut environment =
                 UnevenEnvironment::get_for_workflow(&workflow, env_file.as_ref())?;
             environment.run_workflow(workflow, eval, checkout)?;

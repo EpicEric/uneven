@@ -21,7 +21,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use owo_colors::{OwoColorize, Style};
+use owo_colors::OwoColorize;
 
 use crate::{
     builder::{UnevenBuilder, local::LocalBuilder},
@@ -30,16 +30,12 @@ use crate::{
 };
 
 impl UnevenEnvironment {
-    fn run_job(
-        &mut self,
-        builder: &dyn UnevenBuilder,
-        style: Style,
-        runner: String,
-        job: UnevenJob,
-    ) -> color_eyre::Result<()> {
+    fn run_job(&mut self, builder: &dyn UnevenBuilder, job: UnevenJob) -> color_eyre::Result<()> {
+        let style = builder.get_style();
+        let runner = builder.get_name();
         eprintln!(
             "{} Running job '{}'...",
-            format!("| Runner '{}' |", runner).blue(),
+            format!("{}>", runner).blue(),
             &job.name
         );
 
@@ -81,7 +77,7 @@ impl UnevenEnvironment {
                     builder.fetch_derivation(&upload_path)?;
                     eprintln!(
                         "{} Uploaded {} ({})",
-                        format!("| Runner '{}' | Run '{}' |", runner, step.name).style(style),
+                        format!("{} step[{}]>", runner, step.name).style(style),
                         upload_key,
                         upload_path.to_string_lossy(),
                     );
@@ -91,8 +87,7 @@ impl UnevenEnvironment {
                         if let Ok(line) = line {
                             eprintln!(
                                 "{} {}",
-                                format!("| Runner '{}' | Run '{}' |", runner, step.name)
-                                    .style(style),
+                                format!("{} step[{}]>", runner, step.name).style(style),
                                 line,
                             );
                         } else {
@@ -105,7 +100,7 @@ impl UnevenEnvironment {
                     Ok(())
                 } else {
                     Err(color_eyre::eyre::eyre!(
-                        "Step '{}' failed with exit code {}",
+                        "Step '{}' failed ({})",
                         &step.name,
                         exit_status
                     ))
@@ -127,7 +122,7 @@ impl UnevenEnvironment {
                 if let Ok(line) = line {
                     eprintln!(
                         "{} {}",
-                        format!("| Runner '{}' | Teardown '{}' |", runner, step_name).style(style),
+                        format!("{} step[{}]>", runner, step_name).style(style),
                         line
                     );
                 } else {
@@ -137,19 +132,19 @@ impl UnevenEnvironment {
             let exit_status = child.wait()?;
             if !exit_status.success() {
                 eprintln!(
-                    "{} Teardown failed with exit code {}; continuing",
-                    format!("| Runner '{}' | Teardown '{}' |", runner, step_name).style(style),
+                    "{} Teardown failed ({}); continuing",
+                    format!("{} step[{}]>", runner, step_name).style(style),
                     exit_status
                 );
                 result = Err(color_eyre::eyre::eyre!(
-                    "Teardown for step '{}' failed with exit code {}",
+                    "Teardown for step '{}' failed ({})",
                     step_name,
                     exit_status
                 ));
             }
         }
 
-        builder.uncheckout(&cwdir)?;
+        builder.undo_checkout(&cwdir)?;
 
         result
     }
@@ -159,12 +154,7 @@ impl UnevenEnvironment {
         local_builder: &LocalBuilder,
         job: UnevenJob,
     ) -> color_eyre::Result<()> {
-        self.run_job(
-            local_builder,
-            local_builder.get_style(),
-            local_builder.get_name(),
-            job,
-        )
+        self.run_job(local_builder, job)
     }
 
     pub(crate) fn run_jobs_multiple(
@@ -180,8 +170,7 @@ impl UnevenEnvironment {
                 .is_none_or(|strategy| strategy.fail_fast);
 
             let builder = local_builder.get_builder(&job)?;
-            if let Err(error) = self.run_job(builder, builder.get_style(), builder.get_name(), job)
-            {
+            if let Err(error) = self.run_job(builder, job) {
                 if fail_fast {
                     return Err(error);
                 } else {

@@ -2,6 +2,10 @@
 
 A Nix-based distributed command runner.
 
+## Status
+
+Still an early work-in-progress. Expect breaking changes and broken functionality.
+
 ## Creating workflows
 
 ```nix
@@ -97,10 +101,18 @@ A Nix-based distributed command runner.
 }
 ```
 
-## Running workflows
+Run with:
 
 ```bash
-cix run .uneven/workflow.nix
+uneven run .uneven/workflow.nix
 # --- or ---
-cix run --env-file .env .uneven/workflow.nix
+uneven run --env-file .env .uneven/workflow.nix
+```
+
+## Tests
+
+uneven is tested with itself:
+
+```bash
+cargo run -- run uneven.nix
 ```

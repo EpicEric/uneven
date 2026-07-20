@@ -25,5 +25,31 @@ in
           }
         ];
       };
+
+    test-error =
+      { pkgs, ... }:
+      {
+        name = "Test error exit status";
+        steps = [
+          {
+            path = [
+              (mkUneven pkgs)
+            ];
+            run = ''
+              # Ensure the test evaluates just fine
+              uneven run --eval .uneven/tests/error.nix
+
+              uneven run .uneven/tests/error.nix || error_code=$?
+              if [ "$error_code" -eq 0 ]; then
+                echo "Test shouldn't have succeeded!"
+                exit 1
+              else
+                echo ""
+                echo "=== hint: this means the test works ==="
+              fi
+            '';
+          }
+        ];
+      };
   };
 }
