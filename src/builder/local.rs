@@ -127,13 +127,10 @@ impl UnevenBuilder for LocalBuilder {
     fn run_derivation(
         &self,
         cwdir: &Path,
-        mut derivation: PathBuf,
+        derivation: PathBuf,
         envs: HashMap<OsString, OsString>,
     ) -> color_eyre::Result<(Child, PipeReader)> {
-        derivation.push("bin");
-        derivation.push("uneven-step");
-
-        let mut command = Command::new(&derivation);
+        let mut command = Command::new(derivation.join("bin/uneven-step"));
         let (reader, writer) = std::io::pipe()?;
         command
             .current_dir(cwdir)

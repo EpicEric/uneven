@@ -83,7 +83,7 @@ impl UnevenEnvironment {
         let jh = spawn(move || {
             for line in BufReader::new(reader).lines() {
                 if let Ok(line) = line {
-                    eprintln!("{}", secrets.anonymize(line));
+                    eprintln!("{}", secrets.anonymize(&line));
                 } else {
                     break;
                 }

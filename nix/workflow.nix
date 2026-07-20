@@ -61,7 +61,7 @@ let
       };
 
   stepFn =
-    name: pkgs': env: step:
+    placeholder_name: pkgs': env: step:
     let
       inherit (pkgs')
         writeShellApplication
@@ -79,9 +79,16 @@ let
           '';
           executable = true;
         };
+
+      env' = builtins.mapAttrs (
+        name: value:
+        assert lib.assertMsg (lib.isValidPosixName name)
+          "environment variable '${name}' is not a valid POSIX variable name";
+        value
+      ) (env // step.env);
     in
     {
-      name = if (step.name != null && step.name != "") then step.name else name;
+      name = if (step.name != null && step.name != "") then step.name else placeholder_name;
 
       runDrv =
         (writeShellApplication {
@@ -90,7 +97,7 @@ let
           text = ''
             uneven step \
               --derivation ${script step.run} \
-              --env ${lib.strings.escapeShellArg (builtins.toJSON step.env)}
+              --env ${lib.strings.escapeShellArg (builtins.toJSON env')}
           '';
         }).drvPath;
 
@@ -104,11 +111,11 @@ let
             text = ''
               uneven step \
                 --derivation ${script step.teardown} \
-                --env ${lib.strings.escapeShellArg (builtins.toJSON step.env)}
+                --env ${lib.strings.escapeShellArg (builtins.toJSON env')}
             '';
           }).drvPath;
 
-      env = env // step.env;
+      env = env';
 
       __unevenUploadKey = step.__unevenUploadKey or null;
     };

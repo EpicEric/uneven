@@ -14,6 +14,8 @@
 // You should have received a copy of the GNU Affero General Public License along
 // with this program. If not, see <https://www.gnu.org/licenses/>.
 
+use std::borrow::Cow;
+
 use serde::{Deserialize, Serialize};
 use zeroize::Zeroizing;
 
@@ -74,12 +76,25 @@ impl SecretStringCollection {
         self.0.insert(index, secret);
     }
 
-    pub(crate) fn anonymize(&self, input: String) -> String {
-        let mut output = input;
+    pub(crate) fn anonymize<'a>(&self, string: &'a str) -> Cow<'a, str> {
+        let mut string = Cow::Borrowed(string);
         for secret in self.0.iter() {
-            output = output.replace(secret, "***");
+            let mut output: Option<String> = None;
+            let input = string.as_ref();
+            for (index, _) in input.rmatch_indices(secret) {
+                let mut new_output = String::new();
+                let new_input = output.as_deref()
+                    .unwrap_or(input);
+                new_output.push_str(&new_input[..index]);
+                new_output.push_str("***");
+                new_output.push_str(&new_input[index + secret.len()..]);
+                output = Some(new_output);
+            }
+            if let Some(output) = output.take() {
+                string = Cow::Owned(output);
+            }
         }
-        output
+        string
     }
 }
 
@@ -131,6 +146,18 @@ mod test_secret_string_collection {
         assert_eq!(
             collection.anonymize("123ANOTHER_ONE456MORE_SECRET789".into()),
             "123***456***789"
+        );
+    }
+
+    #[test]
+    fn test_multiple_matches() {
+        let mut collection = SecretStringCollection::new();
+
+        collection.push("aba".into());
+
+        assert_eq!(
+            collection.anonymize("123aba123ababa123".into()),
+            "123***123ab***123"
         );
     }
 }

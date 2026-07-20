@@ -3,7 +3,7 @@ use std::{
     ffi::{OsStr, OsString},
     hash::{DefaultHasher, Hash, Hasher},
     io::{PipeReader, Write},
-    os::unix::ffi::OsStrExt,
+    os::unix::ffi::{OsStrExt, OsStringExt},
     path::{Path, PathBuf},
     process::{Child, Command, Stdio},
 };
@@ -243,33 +243,27 @@ impl UnevenBuilder for RemoteBuilder {
     fn run_derivation(
         &self,
         cwdir: &Path,
-        mut derivation: PathBuf,
+        derivation: PathBuf,
         envs: HashMap<OsString, OsString>,
     ) -> color_eyre::Result<(Child, PipeReader)> {
-        derivation.push("bin");
-        derivation.push("uneven-step");
+        let mut full_command: OsString = "cd ".into();
+        full_command.push(cwdir);
+        full_command.push(" ; ");
 
-        let escaped_env: String = envs
-            .iter()
-            .map(|(key, value)| {
-                format!(
-                    "{}={} ",
-                    key.to_string_lossy(),
-                    shell_escape::unix::escape(value.to_string_lossy())
-                )
-            })
-            .collect();
+        for (key, value) in envs {
+            full_command.push(key);
+            full_command.push("=");
+            full_command.push(escape_os_string(value));
+            full_command.push(" ");
+        }
+
+        full_command.push(derivation.join("bin/uneven-step"));
 
         let mut command = Command::new("ssh");
         if let Some(ssh_identity) = self.ssh_identity.as_ref() {
             command.arg("-i").arg(ssh_identity);
         }
-        command.arg(&self.ssh_uri).arg(format!(
-            "cd {} ; {}{}",
-            cwdir.to_string_lossy(),
-            escaped_env,
-            derivation.to_string_lossy()
-        ));
+        command.arg(&self.ssh_uri).arg(full_command);
         let (reader, writer) = std::io::pipe()?;
         command
             .stdin(Stdio::null())
@@ -306,13 +300,14 @@ impl UnevenBuilder for RemoteBuilder {
     fn uncheckout(&self, strategy: CheckoutStrategy, path: &Path) -> color_eyre::Result<()> {
         match strategy {
             CheckoutStrategy::Default => {
+                let mut rm_command: OsString = "rm -rf ".into();
+                rm_command.push(path);
+
                 let mut command = Command::new("ssh");
                 if let Some(ssh_identity) = self.ssh_identity.as_ref() {
                     command.arg("-i").arg(ssh_identity);
                 }
-                command
-                    .arg(&self.ssh_uri)
-                    .arg(format!("rm -rf {}", path.to_string_lossy()));
+                command.arg(&self.ssh_uri).arg(rm_command);
 
                 let output = command.output()?;
                 if !output.status.success() {
@@ -329,4 +324,39 @@ impl UnevenBuilder for RemoteBuilder {
             }
         }
     }
+}
+
+fn escape_os_string(string: OsString) -> OsString {
+    if !string.is_empty()
+        && string.as_bytes().iter().all(|byte| {
+            matches!(byte, b'a'..=b'z'
+                | b'A'..=b'Z'
+                | b'0'..=b'9'
+                | b'-'
+                | b'_'
+                | b'='
+                | b'/'
+                | b','
+                | b'.'
+                | b'+')
+        })
+    {
+        return string;
+    }
+
+    let mut escaped = Vec::new();
+    escaped.push(b'\'');
+    for char in string.as_encoded_bytes() {
+        match char {
+            b'\'' | b'!' => {
+                escaped.extend(b"'\\");
+                escaped.push(*char);
+                escaped.push(b'\'');
+            }
+            _ => escaped.push(*char),
+        }
+    }
+    escaped.push(b'\'');
+
+    OsString::from_vec(escaped)
 }
