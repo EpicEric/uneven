@@ -19,19 +19,12 @@ let
   inherit (lib) types;
 
   env = types.attrsOf (
-    types.oneOf [
-      types.str
-      (types.submodule {
-        options = {
-          __unevenSecret = lib.mkOption { type = types.str; };
-        };
-      })
-      (types.submodule {
-        options = {
-          __unevenDownload = lib.mkOption { type = types.str; };
-        };
-      })
-    ]
+    types.either types.str (
+      types.attrTag {
+        __unevenSecret = lib.mkOption { type = types.str; };
+        __unevenDownload = lib.mkOption { type = types.str; };
+      }
+    )
   );
 
   step = types.submodule {

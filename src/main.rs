@@ -31,6 +31,7 @@ mod job;
 mod project;
 mod secret;
 mod step;
+mod utils;
 mod workflow;
 
 #[doc(hidden)]

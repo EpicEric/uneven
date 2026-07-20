@@ -40,8 +40,8 @@ in
     packages = [
       pkgs.cargo
       pkgs.clippy
-      pkgs.pkg-config
       pkgs.rustc
+      pkgs.rustfmt
     ];
   };
 }
