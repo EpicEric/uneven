@@ -161,7 +161,8 @@ let
     };
 in
 
-workflow: env:
+workflow:
+{ secrets, vars }:
 unevenConfig (
   lib.evalModules {
     class = "uneven";
@@ -171,11 +172,11 @@ unevenConfig (
     ];
     specialArgs = {
       runner = {
-        secrets = lib.genAttrs env.secrets (name: {
+        secrets = lib.genAttrs secrets (name: {
           __unevenSecret = name;
         });
 
-        inherit (env) vars;
+        inherit vars;
 
         matrix =
           variants: fn:

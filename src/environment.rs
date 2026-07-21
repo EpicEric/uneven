@@ -26,7 +26,10 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 
-use crate::{secret::SecretString, workflow::UnevenStepEnvVar};
+use crate::{
+    secret::SecretString,
+    workflow::{UnevenJob, UnevenJobContainer, UnevenStepEnvVar, UnevenWorkflow},
+};
 
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub(crate) struct UnevenEnvironment {
@@ -68,7 +71,7 @@ impl UnevenEnvironment {
         };
         env_vars.extend(std::env::vars_os());
 
-        let parsed_workflow = Self::parse_workflow(workflow)?;
+        let parsed_workflow = Self::parse_workflow(workflow, &env_vars)?;
 
         let secrets: color_eyre::Result<HashMap<String, SecretString>> = parsed_workflow
             .secrets
@@ -110,35 +113,89 @@ impl UnevenEnvironment {
         })
     }
 
-    // TODO: Improve brittle logic of this function
-    fn parse_workflow(workflow: &Path) -> color_eyre::Result<ParsedWorkflow> {
-        let mut command = Command::new("nix-instantiate");
-        command.args(["--parse", "--keep-derivations"]);
-        let output = command.arg(workflow).output()?;
+    fn parse_workflow(
+        workflow: &Path,
+        env_vars: &HashMap<OsString, OsString>,
+    ) -> color_eyre::Result<ParsedWorkflow> {
+        let workflow_canonical = std::fs::canonicalize(workflow)?;
+        let workflow_str = workflow_canonical
+            .to_str()
+            .ok_or_else(|| color_eyre::eyre::eyre!("non-UTF8 path"))?;
+        let workflow_path = format!("(/. + {})", serde_json::to_string(&workflow_str)?);
+
+        let env_var_names = serde_json::to_string(&serde_json::to_string(
+            &env_vars
+                .keys()
+                .filter_map(|key| key.to_str())
+                .collect::<Vec<_>>(),
+        )?)?;
+
+        let nix_command = format!(
+            "import ./nix/env.nix {{ }} {workflow_path} (builtins.fromJSON {env_var_names})"
+        );
+
+        let mut command = Command::new("nix");
+        command.args([
+            "--extra-experimental-features",
+            "nix-command",
+            "eval",
+            "--impure",
+            "--json",
+        ]);
+        let output = command.arg("--expr").arg(nix_command).output()?;
 
         if !output.status.success() {
             let mut stderr = std::io::stderr();
             stderr.write_all(&output.stderr)?;
             stderr.flush()?;
-            return Err(color_eyre::eyre::eyre!("Failed to parse workflow"));
+            return Err(color_eyre::eyre::eyre!(
+                "Failed to parse workflow for variables"
+            ));
         }
-        let stdout = String::from_utf8(output.stdout)?;
 
-        let vars_regex =
-            regex::Regex::new(r#"\(runner\)\.vars\.("[^"]+"|[A-Za-z_][A-Za-z0-9_-]*)"#)
-                .expect("valid regex");
-        let vars: HashSet<String> = vars_regex
-            .captures_iter(&stdout)
-            .map(|needle| needle.get(1).expect("is match").as_str().to_string())
-            .collect();
+        let workflow: UnevenWorkflow = serde_json::from_slice(&output.stdout)?;
 
-        let secrets_regex =
-            regex::Regex::new(r#"\(runner\)\.secrets\.("[^"]+"|[A-Za-z_][A-Za-z0-9_-]*)"#)
-                .expect("valid regex");
-        let secrets: HashSet<String> = secrets_regex
-            .captures_iter(&stdout)
-            .map(|needle| needle.get(1).expect("is match").as_str().to_string())
-            .collect();
+        let mut vars: HashSet<String> = HashSet::new();
+        let mut secrets: HashSet<String> = HashSet::new();
+
+        let vars_regex = regex::Regex::new(r#"@@__unevenVar_([^@]+)@@"#).expect("valid regex");
+
+        let mut job_fn = |job: &UnevenJob| {
+            for step in &job.steps {
+                for env_value in step.env.values() {
+                    match env_value {
+                        UnevenStepEnvVar::Plain(var) => {
+                            vars.extend(vars_regex.captures_iter(var).map(|needle| {
+                                needle.get(1).expect("is match").as_str().to_string()
+                            }));
+                        }
+                        UnevenStepEnvVar::Secret(secret) => {
+                            secrets.insert(secret.secret_name.clone());
+                        }
+                        UnevenStepEnvVar::Download(_) => {}
+                    }
+                }
+            }
+        };
+
+        for job in workflow.jobs.values() {
+            match job {
+                UnevenJobContainer::Single(job) => (job_fn)(job),
+                UnevenJobContainer::Multiple(job_vec) => {
+                    for job in job_vec {
+                        (job_fn)(job)
+                    }
+                }
+            }
+        }
+
+        for secret in &secrets {
+            if vars.contains(secret) {
+                return Err(color_eyre::eyre::eyre!(
+                    "Secret '{secret}' cannot also be used as a regular variable"
+                ));
+            }
+        }
 
         Ok(ParsedWorkflow { vars, secrets })
     }

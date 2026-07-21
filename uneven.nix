@@ -4,6 +4,26 @@ let
 in
 {
   jobs = {
+    test-env =
+      { pkgs, ... }:
+      {
+        name = "Test environment";
+        steps = [
+          {
+            env = {
+              MY_VAR = "This is a variable";
+              MY_SECRET = "This is a secret";
+            };
+            path = [
+              (mkUneven pkgs)
+            ];
+            run = ''
+              uneven run .uneven/tests/env.nix
+            '';
+          }
+        ];
+      };
+
     test-error =
       { pkgs, ... }:
       {
