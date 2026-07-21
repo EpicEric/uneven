@@ -17,13 +17,7 @@
 {
   system ? builtins.currentSystem,
   pkgs ? import <nixpkgs> { inherit system; },
-  mkUneven ?
-    pkgs':
-    (import ./. {
-      pkgs = import <nixpkgs> {
-        inherit (pkgs'.stdenv.hostPlatform) system;
-      };
-    }).uneven,
+  mkUneven ? pkgs': (import ./. { pkgs = pkgs'; }).uneven,
 }:
 
 let
@@ -47,7 +41,7 @@ let
         fn {
           job = normalizeJob e.job;
           pkgs' = e.pkgs' or pkgs;
-          system-features = e.system-features or [ ];
+          requiredSystemFeatures = e.requiredSystemFeatures or [ ];
         }
       ) jobVal
     else
@@ -57,7 +51,7 @@ let
           inherit (pkgs) lib;
         });
         pkgs' = pkgs;
-        system-features = [ ];
+        requiredSystemFeatures = [ ];
       };
 
   stepFn =
@@ -93,7 +87,7 @@ let
       runDrv =
         (writeShellApplication {
           name = "uneven-step";
-          runtimeInputs = [ (mkUneven pkgs') ] ++ step.path;
+          runtimeInputs = step.path ++ [ (mkUneven pkgs') ];
           text = ''
             uneven step \
               --derivation ${script step.run} \
@@ -107,7 +101,7 @@ let
         else
           (writeShellApplication {
             name = "uneven-step";
-            runtimeInputs = [ (mkUneven pkgs') ] ++ step.path;
+            runtimeInputs = step.path ++ [ (mkUneven pkgs') ];
             text = ''
               uneven step \
                 --derivation ${script step.teardown} \
@@ -130,14 +124,17 @@ let
           {
             job,
             pkgs',
-            system-features,
+            requiredSystemFeatures,
           }:
+          assert lib.assertMsg (builtins.all (
+            x: lib.isString x
+          ) requiredSystemFeatures) "requiredSystemFeatures argument must be a list of strings";
           job
           // {
             name = if (job.name != null && job.name != "") then job.name else jobName;
             buildSystem = pkgs'.stdenv.buildPlatform.system;
             hostSystem = pkgs'.stdenv.hostPlatform.system;
-            inherit system-features;
+            inherit requiredSystemFeatures;
             steps = lib.imap0 (i: stepFn "${jobName}-${toString i}" pkgs' job.env) job.steps;
           }
         ) job'
@@ -191,7 +188,7 @@ unevenConfig (
               // v
             );
             pkgs' = v.pkgs or pkgs;
-            system-features = v.system-features or [ ];
+            requiredSystemFeatures = v.requiredSystemFeatures or [ ];
           }) variants;
 
         steps = {

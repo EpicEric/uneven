@@ -1,4 +1,3 @@
-{ ... }:
 {
   jobs = {
     format = { pkgs, ... }: {
@@ -7,12 +6,8 @@
         {
           # name = "Run rustfmt";
           run = ''
-            echo "Hello, world!"
             cargo fmt --all
             treefmt
-          '';
-          teardown = ''
-            echo "Tearing down 'Fix formatting'..."
           '';
           path = [
             pkgs.cargo

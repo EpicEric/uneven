@@ -35,7 +35,7 @@ impl UnevenEnvironment {
         let runner = builder.get_name();
         eprintln!(
             "{} Running job '{}'...",
-            format!("{}>", runner).blue(),
+            format!("{}>", runner).style(style),
             &job.name
         );
 

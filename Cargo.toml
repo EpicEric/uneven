@@ -2,7 +2,7 @@
 name = "uneven"
 version = "0.1.0"
 edition = "2024"
-description = "A Nix-based distributed command runner"
+description = "Nix-based distributed command runner"
 license = "AGPL-3.0-or-later"
 
 [dependencies]

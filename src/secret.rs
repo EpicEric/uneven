@@ -83,8 +83,7 @@ impl SecretStringCollection {
             let input = string.as_ref();
             for (index, _) in input.rmatch_indices(secret) {
                 let mut new_output = String::new();
-                let new_input = output.as_deref()
-                    .unwrap_or(input);
+                let new_input = output.as_deref().unwrap_or(input);
                 new_output.push_str(&new_input[..index]);
                 new_output.push_str("***");
                 new_output.push_str(&new_input[index + secret.len()..]);

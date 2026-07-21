@@ -61,7 +61,7 @@ rustPlatform.buildRustPackage {
 
   meta = {
     name = "uneven";
-    description = "A Nix-based distributed command runner";
+    description = "Nix-based distributed command runner";
     homepage = "https://github.com/EpicEric/uneven";
     license = lib.licenses.agpl3Plus;
     mainProgram = "uneven";

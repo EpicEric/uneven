@@ -40,6 +40,7 @@ pub(crate) struct RemoteBuilder {
     pub(crate) ssh_identity: Option<String>,
     pub(crate) systems: HashSet<String>,
     pub(crate) system_features: HashSet<String>,
+    pub(crate) required_features: HashSet<String>,
 }
 
 impl RemoteBuilder {
@@ -62,9 +63,11 @@ impl RemoteBuilder {
             .split(&builders)
         {
             let mut iter = builder.split(' ');
+
             let Some(ssh_uri) = iter.next() else {
                 continue;
             };
+
             let systems = if let Some(systems) = iter.next()
                 && systems != "-"
             {
@@ -75,6 +78,7 @@ impl RemoteBuilder {
             } else {
                 [config.system.value.clone()].into_iter().collect()
             };
+
             let ssh_identity = iter.next().and_then(|identity| {
                 if identity == "-" {
                     None
@@ -82,8 +86,11 @@ impl RemoteBuilder {
                     Some(identity.to_string())
                 }
             });
+
             let _maximum_builds = iter.next();
+
             let _speed_factor = iter.next();
+
             let system_features = if let Some(system_features) = iter.next()
                 && system_features != "-"
             {
@@ -94,12 +101,27 @@ impl RemoteBuilder {
             } else {
                 HashSet::new()
             };
+
+            let required_features = if let Some(required_features) = iter.next()
+                && required_features != "-"
+            {
+                required_features
+                    .split(',')
+                    .map(|feature| feature.to_string())
+                    .collect()
+            } else {
+                HashSet::new()
+            };
+
+            let _ssh_host_key = iter.next();
+
             vec.push(RemoteBuilder {
                 strategy,
                 ssh_uri: ssh_uri.to_string(),
                 ssh_identity,
                 systems,
                 system_features,
+                required_features,
             })
         }
 

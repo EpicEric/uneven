@@ -17,7 +17,8 @@
             assert os.environ.get("SECOND_VAR") is None
             assert os.environ.get("SECOND_SECRET") is None
 
-            print("Success.")
+            print(f"FIRST_VAR = {os.environ["FIRST_VAR"]}")
+            print(f"FIRST_SECRET = {os.environ["FIRST_SECRET"]}")
           '';
         }
       ];
@@ -40,7 +41,8 @@
             assert os.environ.get("FIRST_VAR") is None
             assert os.environ.get("FIRST_SECRET") is None
 
-            print("Success.")
+            print(f"SECOND_VAR = {os.environ["SECOND_VAR"]}")
+            print(f"SECOND_SECRET = {os.environ["SECOND_SECRET"]}")
           '';
         }
       ];

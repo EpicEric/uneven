@@ -80,7 +80,7 @@ impl LocalBuilder {
     pub(crate) fn get_builder(&self, job: &UnevenJob) -> color_eyre::Result<&dyn UnevenBuilder> {
         if job.build_system == self.system
             && job
-                .system_features
+                .required_system_features
                 .iter()
                 .all(|feature| self.system_features.contains(feature))
         {
@@ -88,8 +88,12 @@ impl LocalBuilder {
         } else {
             for builder in self.remote_builders.iter() {
                 if builder.systems.contains(&job.build_system)
+                    && builder
+                        .required_features
+                        .iter()
+                        .all(|feature| job.required_system_features.contains(feature))
                     && job
-                        .system_features
+                        .required_system_features
                         .iter()
                         .all(|feature| builder.system_features.contains(feature))
                 {
@@ -97,8 +101,10 @@ impl LocalBuilder {
                 }
             }
             Err(color_eyre::eyre::eyre!(
-                "No builders match for job '{}'",
-                job.name
+                "No builders match for job '{}' (buildSystem = {}, requiredSystemFeatures = {:?})",
+                job.name,
+                job.build_system,
+                job.required_system_features,
             ))
         }
     }

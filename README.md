@@ -71,7 +71,7 @@ Still an early work-in-progress. Expect breaking changes and broken functionalit
         }
         {
           # Specify the system features of the remote
-          system-features = [ "kvm" ];
+          requiredSystemFeatures = [ "kvm" ];
         }
         {
           # Specify other optional parameters
@@ -82,7 +82,7 @@ Still an early work-in-progress. Expect breaking changes and broken functionalit
         { pkgs, spam ? null, ... }:
         {
           name = "Matrix job (${if spam != null then spam else pkgs.stdenv.hostPlatform.system})";
-          # Run all jobs in this matrix even if one fails
+          # If fail-fast = true (default), the first failing matrix terminates the job
           strategy.fail-fast = false;
           # Establish that this job must run after another
           needs = [ "job-1" ];
@@ -114,5 +114,5 @@ uneven run --env-file .env .uneven/workflow.nix
 uneven is tested with itself:
 
 ```bash
-cargo run -- run uneven.nix
+nix run . -- run uneven.nix
 ```

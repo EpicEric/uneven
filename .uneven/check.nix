@@ -142,15 +142,15 @@ in
         [
           {
             pkgs = import <nixpkgs> { system = "x86_64-linux"; };
-            system-features = [ "docker" ];
+            requiredSystemFeatures = [ "docker" ];
           }
           {
             pkgs = import <nixpkgs> { system = "aarch64-linux"; };
-            system-features = [ "docker" ];
+            requiredSystemFeatures = [ "docker" ];
           }
           {
             pkgs = import <nixpkgs> { system = "aarch64-darwin"; };
-            system-features = [ "docker" ];
+            requiredSystemFeatures = [ "docker" ];
           }
         ]
         (
@@ -180,7 +180,7 @@ in
       runner.matrix
         [
           {
-            system-features = [ "docker" ];
+            requiredSystemFeatures = [ "docker" ];
           }
         ]
         (

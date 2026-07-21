@@ -54,8 +54,8 @@ pub(crate) struct UnevenJob {
     pub(crate) build_system: String,
     #[serde(rename = "hostSystem")]
     pub(crate) _host_system: String,
-    #[serde(rename = "system-features")]
-    pub(crate) system_features: Vec<String>,
+    #[serde(rename = "requiredSystemFeatures")]
+    pub(crate) required_system_features: HashSet<String>,
     pub(crate) strategy: Option<UnevenStrategy>,
     pub(crate) needs: Option<Vec<String>>,
     pub(crate) steps: Vec<UnevenStep>,
