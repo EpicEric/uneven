@@ -21,11 +21,15 @@ use std::{
     io::{PipeReader, Write},
     os::unix::ffi::OsStrExt,
     path::{Path, PathBuf},
-    process::{Child, Command, Stdio},
 };
 
+use async_trait::async_trait;
 use owo_colors::Style;
 use rand::{SeedableRng, seq::IndexedRandom};
+use smol::{
+    lock::Semaphore,
+    process::{Child, Command, Stdio},
+};
 
 use crate::{
     CheckoutStrategy,
@@ -36,6 +40,7 @@ use crate::{
 
 pub(crate) struct RemoteBuilder {
     pub(crate) strategy: CheckoutStrategy,
+    pub(crate) semaphore: Semaphore,
     pub(crate) ssh_uri: String,
     pub(crate) ssh_identity: Option<String>,
     pub(crate) systems: HashSet<String>,
@@ -117,6 +122,7 @@ impl RemoteBuilder {
 
             vec.push(RemoteBuilder {
                 strategy,
+                semaphore: Semaphore::new(1),
                 ssh_uri: ssh_uri.to_string(),
                 ssh_identity,
                 systems,
@@ -129,7 +135,12 @@ impl RemoteBuilder {
     }
 }
 
+#[async_trait(?Send)]
 impl UnevenBuilder for RemoteBuilder {
+    fn acquire(&self) -> smol::lock::futures::Acquire<'_> {
+        self.semaphore.acquire()
+    }
+
     fn get_name(&self) -> String {
         self.ssh_uri.clone()
     }
@@ -149,7 +160,7 @@ impl UnevenBuilder for RemoteBuilder {
         .expect("not empty")
     }
 
-    fn checkout(&self) -> color_eyre::Result<PathBuf> {
+    async fn checkout(&self) -> color_eyre::Result<PathBuf> {
         match self.strategy {
             CheckoutStrategy::Default => {
                 let tmpdir = format!("uneven-{}", uuid::Uuid::new_v4());
@@ -178,7 +189,7 @@ impl UnevenBuilder for RemoteBuilder {
                     tmpdir
                 ));
 
-                let output = command.output()?;
+                let output = command.output().await?;
                 if !output.status.success() {
                     let mut stderr = std::io::stderr();
                     stderr.write_all(&output.stderr)?;
@@ -194,7 +205,7 @@ impl UnevenBuilder for RemoteBuilder {
         }
     }
 
-    fn copy_derivations(&self, job: &UnevenJob) -> color_eyre::Result<()> {
+    async fn copy_derivations(&self, job: &UnevenJob) -> color_eyre::Result<()> {
         let mut command = Command::new("nix");
         command.args([
             "--extra-experimental-features",
@@ -219,7 +230,7 @@ impl UnevenBuilder for RemoteBuilder {
                 .collect::<Vec<_>>(),
         );
 
-        let output = command.output()?;
+        let output = command.output().await?;
         if !output.status.success() {
             let mut stderr = std::io::stderr();
             stderr.write_all(&output.stderr)?;
@@ -234,7 +245,7 @@ impl UnevenBuilder for RemoteBuilder {
         Ok(())
     }
 
-    fn realize_derivation(&self, derivation: &Path) -> color_eyre::Result<PathBuf> {
+    async fn realize_derivation(&self, derivation: &Path) -> color_eyre::Result<PathBuf> {
         let mut command = Command::new("ssh");
         if let Some(ssh_identity) = self.ssh_identity.as_ref() {
             command.arg("-i").arg(ssh_identity);
@@ -243,7 +254,7 @@ impl UnevenBuilder for RemoteBuilder {
             .args([&self.ssh_uri, "nix-store", "--realise"])
             .arg(derivation);
 
-        let output = command.output()?;
+        let output = command.output().await?;
         if !output.status.success() {
             let mut stderr = std::io::stderr();
             stderr.write_all(&output.stderr)?;
@@ -260,7 +271,7 @@ impl UnevenBuilder for RemoteBuilder {
         )))
     }
 
-    fn download(&self, downloads: &[&Path]) -> color_eyre::Result<()> {
+    async fn download(&self, downloads: &[PathBuf]) -> color_eyre::Result<()> {
         let mut command = Command::new("nix");
         command.args([
             "--extra-experimental-features",
@@ -270,7 +281,7 @@ impl UnevenBuilder for RemoteBuilder {
         ]);
         command.arg(&self.ssh_uri).args(downloads);
 
-        let output = command.output()?;
+        let output = command.output().await?;
         if !output.status.success() {
             let mut stderr = std::io::stderr();
             stderr.write_all(&output.stderr)?;
@@ -316,7 +327,7 @@ impl UnevenBuilder for RemoteBuilder {
         Ok((command.spawn()?, reader))
     }
 
-    fn fetch_derivation(&self, derivation: &Path) -> color_eyre::Result<()> {
+    async fn fetch_derivation(&self, derivation: &Path) -> color_eyre::Result<()> {
         let mut command = Command::new("nix");
         command.args([
             "--extra-experimental-features",
@@ -326,7 +337,7 @@ impl UnevenBuilder for RemoteBuilder {
         ]);
         command.arg(&self.ssh_uri).arg(derivation);
 
-        let output = command.output()?;
+        let output = command.output().await?;
         if !output.status.success() {
             let mut stderr = std::io::stderr();
             stderr.write_all(&output.stderr)?;
@@ -341,7 +352,7 @@ impl UnevenBuilder for RemoteBuilder {
         Ok(())
     }
 
-    fn undo_checkout(&self, path: &Path) -> color_eyre::Result<()> {
+    async fn undo_checkout(&self, path: &Path) -> color_eyre::Result<()> {
         match self.strategy {
             CheckoutStrategy::Default => {
                 let mut rm_command: OsString = "rm -rf ".into();
@@ -353,7 +364,7 @@ impl UnevenBuilder for RemoteBuilder {
                 }
                 command.arg(&self.ssh_uri).arg(rm_command);
 
-                let output = command.output()?;
+                let output = command.output().await?;
                 if !output.status.success() {
                     let mut stderr = std::io::stderr();
                     stderr.write_all(&output.stderr)?;

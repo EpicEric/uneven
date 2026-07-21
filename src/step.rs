@@ -66,7 +66,7 @@ impl UnevenEnvironment {
         for (key, value) in &self.vars {
             command.env(key, value);
         }
-        for (key, value) in &self.uploads {
+        for (key, value) in self.uploads.lock().expect("not poisoned").iter() {
             command.env(key, value);
         }
         command.env("CI", "1");

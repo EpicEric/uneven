@@ -18,14 +18,17 @@ use std::{
     collections::{HashMap, HashSet},
     io::Write,
     path::{Path, PathBuf},
+    pin::Pin,
     process::Command,
 };
 
+use futures::{TryStreamExt, stream::FuturesUnordered};
 use owo_colors::OwoColorize;
 use petgraph::{
     acyclic::Acyclic, algo::Cycle, matrix_graph::NodeIndex, stable_graph::StableDiGraph,
 };
 use serde::Deserialize;
+use smol::{Task, stream::StreamExt};
 
 use crate::{
     CheckoutStrategy,
@@ -134,6 +137,8 @@ impl UnevenEnvironment {
         }
         let mut tree = workflow.build_graph()?;
 
+        let executor = smol::LocalExecutor::new();
+
         'tree: loop {
             let mut current_nodes: HashSet<NodeIndex<u32>> = HashSet::new();
             for node in tree.nodes_iter() {
@@ -147,6 +152,8 @@ impl UnevenEnvironment {
             }
 
             debug_assert!(!current_nodes.is_empty());
+            let futures =
+                FuturesUnordered::<Pin<Box<dyn Future<Output = color_eyre::Result<()>>>>>::new();
             for node in current_nodes {
                 let node = tree.remove_node(node).expect("node exists");
                 match node {
@@ -155,13 +162,24 @@ impl UnevenEnvironment {
                         break 'tree;
                     }
                     UnevenJobNode::Single(job) => {
-                        self.run_job_single(&builder, job)?;
+                        futures.push(self.run_job_single(&builder, job));
                     }
                     UnevenJobNode::Multiple(job_vec) => {
-                        self.run_jobs_multiple(&builder, job_vec)?;
+                        let (fail_fast, no_fail_fast) =
+                            self.run_jobs_multiple(&builder, job_vec)?;
+                        futures.push(fail_fast);
+                        futures.push(no_fail_fast);
                     }
                 }
             }
+            let task: Task<color_eyre::Result<()>> = executor.spawn(async {
+                let mut stream = futures.into_stream();
+                while let Some(future) = stream.next().await {
+                    future?;
+                }
+                Ok(())
+            });
+            smol::future::block_on(executor.run(task))?;
         }
 
         Ok(())

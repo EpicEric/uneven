@@ -21,6 +21,7 @@ use std::{
     os::unix::ffi::OsStrExt,
     path::{Path, PathBuf},
     process::Command,
+    sync::Mutex,
 };
 
 use serde::{Deserialize, Serialize};
@@ -32,7 +33,7 @@ pub(crate) struct UnevenEnvironment {
     pub(crate) secrets: HashMap<String, SecretString>,
     pub(crate) vars: HashMap<String, String>,
     pub(crate) local_env: HashMap<OsString, OsString>,
-    pub(crate) uploads: HashMap<String, PathBuf>,
+    pub(crate) uploads: Mutex<HashMap<String, PathBuf>>,
 }
 
 #[derive(Debug, Default, Deserialize, Serialize)]
@@ -175,7 +176,7 @@ impl UnevenEnvironment {
             secrets: secrets?,
             vars: env.vars,
             local_env: HashMap::new(),
-            uploads: env.uploads,
+            uploads: Mutex::new(env.uploads),
         })
     }
 
@@ -184,50 +185,59 @@ impl UnevenEnvironment {
         step_env: &HashMap<String, UnevenStepEnvVar>,
     ) -> color_eyre::Result<HashMap<OsString, OsString>> {
         let mut env_init = UnevenEnvironmentInit {
-            uploads: self.uploads.clone(),
+            uploads: self.uploads.lock().expect("not poisoned").clone(),
             ..Default::default()
         };
 
         let mut map: HashMap<OsString, OsString> = HashMap::with_capacity(step_env.len() + 1);
 
-        for (key, value) in step_env {
-            match value {
-                UnevenStepEnvVar::Plain(value) => {
-                    env_init.vars.insert(key.clone(), value.clone());
-                }
-                UnevenStepEnvVar::Secret(secret) => {
-                    map.insert(
-                        key.into(),
-                        self.secrets
-                            .get(&secret.secret_name)
-                            .ok_or_else(|| {
-                                color_eyre::eyre::eyre!("Missing secret {}", &secret.secret_name)
-                            })?
-                            .get_secret_value()
-                            .into(),
-                    );
-                    env_init
-                        .secrets
-                        .insert(key.clone(), secret.secret_name.clone());
-                }
-                UnevenStepEnvVar::Download(download) => {
-                    let download_path =
-                        self.uploads.get(&download.download_name).ok_or_else(|| {
-                            color_eyre::eyre::eyre!("Missing download {}", &download.download_name)
-                        })?;
-                    map.insert(key.into(), download_path.into());
-                    env_init.vars.insert(
-                        key.into(),
-                        download_path
-                            .to_str()
-                            .ok_or_else(|| {
+        {
+            let uploads = self.uploads.lock().expect("not poisoned");
+            for (key, value) in step_env {
+                match value {
+                    UnevenStepEnvVar::Plain(value) => {
+                        env_init.vars.insert(key.clone(), value.clone());
+                    }
+                    UnevenStepEnvVar::Secret(secret) => {
+                        map.insert(
+                            key.into(),
+                            self.secrets
+                                .get(&secret.secret_name)
+                                .ok_or_else(|| {
+                                    color_eyre::eyre::eyre!(
+                                        "Missing secret {}",
+                                        &secret.secret_name
+                                    )
+                                })?
+                                .get_secret_value()
+                                .into(),
+                        );
+                        env_init
+                            .secrets
+                            .insert(key.clone(), secret.secret_name.clone());
+                    }
+                    UnevenStepEnvVar::Download(download) => {
+                        let download_path =
+                            uploads.get(&download.download_name).ok_or_else(|| {
                                 color_eyre::eyre::eyre!(
-                                    "Invalid UTF-8 for download path of {}",
+                                    "Missing download {}",
                                     &download.download_name
                                 )
-                            })?
-                            .into(),
-                    );
+                            })?;
+                        map.insert(key.into(), download_path.into());
+                        env_init.vars.insert(
+                            key.into(),
+                            download_path
+                                .to_str()
+                                .ok_or_else(|| {
+                                    color_eyre::eyre::eyre!(
+                                        "Invalid UTF-8 for download path of {}",
+                                        &download.download_name
+                                    )
+                                })?
+                                .into(),
+                        );
+                    }
                 }
             }
         }

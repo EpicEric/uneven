@@ -20,10 +20,14 @@ use std::{
     io::{PipeReader, Write},
     os::unix::ffi::OsStrExt,
     path::{Path, PathBuf},
-    process::{Child, Command, Stdio},
 };
 
+use async_trait::async_trait;
 use owo_colors::Style;
+use smol::{
+    lock::Semaphore,
+    process::{Child, Command, Stdio},
+};
 
 use crate::{
     CheckoutStrategy,
@@ -35,6 +39,7 @@ use crate::{
 pub(crate) struct LocalBuilder {
     pub(crate) env: HashMap<OsString, OsString>,
     pub(crate) strategy: CheckoutStrategy,
+    pub(crate) semaphore: Semaphore,
     pub(crate) hostname: String,
     pub(crate) system: String,
     pub(crate) system_features: HashSet<String>,
@@ -46,7 +51,7 @@ impl LocalBuilder {
         environment: &UnevenEnvironment,
         strategy: CheckoutStrategy,
     ) -> color_eyre::Result<Self> {
-        let output = Command::new("nix")
+        let output = std::process::Command::new("nix")
             .args([
                 "--extra-experimental-features",
                 "nix-command",
@@ -70,6 +75,7 @@ impl LocalBuilder {
         Ok(Self {
             env: environment.local_env.clone(),
             strategy,
+            semaphore: Semaphore::new(1),
             hostname: sys_info::hostname()?,
             system: config.system.value,
             system_features: config.system_features.value.into_iter().collect(),
@@ -110,7 +116,12 @@ impl LocalBuilder {
     }
 }
 
+#[async_trait(?Send)]
 impl UnevenBuilder for LocalBuilder {
+    fn acquire(&self) -> smol::lock::futures::Acquire<'_> {
+        self.semaphore.acquire()
+    }
+
     fn get_name(&self) -> String {
         self.hostname.clone()
     }
@@ -119,22 +130,22 @@ impl UnevenBuilder for LocalBuilder {
         Style::new().blue()
     }
 
-    fn checkout(&self) -> color_eyre::Result<PathBuf> {
+    async fn checkout(&self) -> color_eyre::Result<PathBuf> {
         match self.strategy {
             CheckoutStrategy::Default => Ok(std::env::current_dir()?),
         }
     }
 
-    fn copy_derivations(&self, _job: &UnevenJob) -> color_eyre::Result<()> {
+    async fn copy_derivations(&self, _job: &UnevenJob) -> color_eyre::Result<()> {
         Ok(())
     }
 
-    fn realize_derivation(&self, derivation: &Path) -> color_eyre::Result<PathBuf> {
+    async fn realize_derivation(&self, derivation: &Path) -> color_eyre::Result<PathBuf> {
         let mut command = Command::new("nix-store");
         command.arg("--realise");
         command.arg(derivation);
 
-        let output = command.output()?;
+        let output = command.output().await?;
         if !output.status.success() {
             let mut stderr = std::io::stderr();
             stderr.write_all(&output.stderr)?;
@@ -150,7 +161,7 @@ impl UnevenBuilder for LocalBuilder {
         )))
     }
 
-    fn download(&self, _downloads: &[&Path]) -> color_eyre::Result<()> {
+    async fn download(&self, _downloads: &[PathBuf]) -> color_eyre::Result<()> {
         Ok(())
     }
 
@@ -173,11 +184,11 @@ impl UnevenBuilder for LocalBuilder {
         Ok((command.spawn()?, reader))
     }
 
-    fn fetch_derivation(&self, _derivation: &Path) -> color_eyre::Result<()> {
+    async fn fetch_derivation(&self, _derivation: &Path) -> color_eyre::Result<()> {
         Ok(())
     }
 
-    fn undo_checkout(&self, _path: &Path) -> color_eyre::Result<()> {
+    async fn undo_checkout(&self, _path: &Path) -> color_eyre::Result<()> {
         match self.strategy {
             CheckoutStrategy::Default => Ok(()),
         }

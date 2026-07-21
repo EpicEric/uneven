@@ -19,9 +19,11 @@ use std::{
     ffi::OsString,
     io::PipeReader,
     path::{Path, PathBuf},
-    process::Child,
 };
 
+use smol::process::Child;
+
+use async_trait::async_trait;
 use serde::Deserialize;
 
 use crate::workflow::UnevenJob;
@@ -29,18 +31,21 @@ use crate::workflow::UnevenJob;
 pub(crate) mod local;
 pub(crate) mod remote;
 
+#[async_trait(?Send)]
 pub(crate) trait UnevenBuilder {
+    fn acquire(&self) -> smol::lock::futures::Acquire<'_>;
+
     fn get_name(&self) -> String;
 
     fn get_style(&self) -> owo_colors::Style;
 
-    fn checkout(&self) -> color_eyre::Result<PathBuf>;
+    async fn checkout(&self) -> color_eyre::Result<PathBuf>;
 
-    fn copy_derivations(&self, job: &UnevenJob) -> color_eyre::Result<()>;
+    async fn copy_derivations(&self, job: &UnevenJob) -> color_eyre::Result<()>;
 
-    fn realize_derivation(&self, derivation: &Path) -> color_eyre::Result<PathBuf>;
+    async fn realize_derivation(&self, derivation: &Path) -> color_eyre::Result<PathBuf>;
 
-    fn download(&self, downloads: &[&Path]) -> color_eyre::Result<()>;
+    async fn download(&self, downloads: &[PathBuf]) -> color_eyre::Result<()>;
 
     fn run_derivation(
         &self,
@@ -49,9 +54,9 @@ pub(crate) trait UnevenBuilder {
         envs: HashMap<OsString, OsString>,
     ) -> color_eyre::Result<(Child, PipeReader)>;
 
-    fn fetch_derivation(&self, derivation: &Path) -> color_eyre::Result<()>;
+    async fn fetch_derivation(&self, derivation: &Path) -> color_eyre::Result<()>;
 
-    fn undo_checkout(&self, path: &Path) -> color_eyre::Result<()>;
+    async fn undo_checkout(&self, path: &Path) -> color_eyre::Result<()>;
 }
 
 #[derive(Deserialize, Debug)]
