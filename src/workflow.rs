@@ -210,9 +210,7 @@ impl UnevenEnvironment {
             .ok_or_else(|| color_eyre::eyre::eyre!("non-UTF8 path"))?;
         let workflow_path = format!("(/. + {})", serde_json::to_string(&workflow_str)?);
 
-        let mut nix_workflow = create_project_source()?;
-        nix_workflow.push("nix");
-        nix_workflow.push("workflow.nix");
+        let nix_workflow = create_project_source()?.join("nix/workflow.nix");
         let nix_workflow_canonical = std::fs::canonicalize(&nix_workflow)?;
         let nix_workflow_str = nix_workflow_canonical
             .to_str()

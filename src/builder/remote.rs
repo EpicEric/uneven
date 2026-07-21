@@ -202,6 +202,21 @@ impl UnevenBuilder for RemoteBuilder {
 
                 Ok((Some(command.spawn()?), PathBuf::from(tmpdir)))
             }
+            CheckoutStrategy::None => {
+                let tmpdir = format!("uneven-{}", uuid::Uuid::new_v4());
+
+                let mut command = Command::new("ssh");
+                if let Some(ssh_identity) = self.ssh_identity.as_ref() {
+                    command.arg("-i").arg(ssh_identity);
+                }
+                command
+                    .args([&self.ssh_uri, "mkdir", &tmpdir])
+                    .stdin(Stdio::null())
+                    .stdout(Stdio::piped())
+                    .stderr(Stdio::piped());
+
+                Ok((Some(command.spawn()?), PathBuf::from(tmpdir)))
+            }
         }
     }
 
@@ -426,7 +441,7 @@ impl UnevenBuilder for RemoteBuilder {
 
     async fn undo_checkout(&self, path: &Path) -> color_eyre::Result<()> {
         match self.strategy {
-            CheckoutStrategy::Default => {
+            CheckoutStrategy::Default | CheckoutStrategy::None => {
                 let mut rm_command: OsString = "rm -rf ".into();
                 rm_command.push(path);
 

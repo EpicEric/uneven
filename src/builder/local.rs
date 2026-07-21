@@ -16,6 +16,7 @@
 
 use std::{
     collections::{HashMap, HashSet},
+    env::temp_dir,
     ffi::{OsStr, OsString},
     io::{PipeReader, Write},
     os::unix::ffi::OsStrExt,
@@ -147,6 +148,19 @@ impl UnevenBuilder for LocalBuilder {
     fn checkout(&self) -> color_eyre::Result<(Option<Child>, PathBuf)> {
         match self.strategy {
             CheckoutStrategy::Default => Ok((None, std::env::current_dir()?)),
+            CheckoutStrategy::None => {
+                let tmpdir = temp_dir().join(format!("uneven-{}", uuid::Uuid::new_v4()));
+
+                let mut command = Command::new("mkdir");
+                command
+                    .arg("-p")
+                    .arg(&tmpdir)
+                    .stdin(Stdio::null())
+                    .stdout(Stdio::piped())
+                    .stderr(Stdio::piped());
+
+                Ok((Some(command.spawn()?), tmpdir))
+            }
         }
     }
 
@@ -234,9 +248,23 @@ impl UnevenBuilder for LocalBuilder {
         Ok(())
     }
 
-    async fn undo_checkout(&self, _path: &Path) -> color_eyre::Result<()> {
+    async fn undo_checkout(&self, path: &Path) -> color_eyre::Result<()> {
         match self.strategy {
             CheckoutStrategy::Default => Ok(()),
+            CheckoutStrategy::None => {
+                let mut command = Command::new("rm");
+                command.arg("-rf").arg(path);
+
+                let mut child = command.spawn()?;
+                if child.status().await?.success() {
+                    Ok(())
+                } else {
+                    pipe_outputs_to_stderr(&mut child).await?;
+                    Err(color_eyre::eyre::eyre!(
+                        "Failed to remove locally checked out directory"
+                    ))
+                }
+            }
         }
     }
 }

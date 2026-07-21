@@ -37,18 +37,27 @@ mod workflow;
 #[doc(hidden)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
 pub(crate) enum CheckoutStrategy {
+    /// Don't checkout; create a fresh directory for every job.
+    None,
+    /// On the local builder, run commands at the local directory.
+    /// On remote builders, copy non-ignored files from the local directory via rsync.
     Default,
 }
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
 enum Command {
+    /// Run a workflow.
     Run {
+        /// Path to the workflow.
         workflow: PathBuf,
+        /// Optional dotenv file to read environment variables from.
         #[arg(long)]
         env_file: Option<PathBuf>,
+        /// Evaluate but don't run the workflow.
         #[arg(long)]
         eval: bool,
+        /// Strategy for checking out the current working directory.
         #[arg(
             long,
             value_enum,
@@ -57,16 +66,23 @@ enum Command {
         )]
         checkout: CheckoutStrategy,
     },
+    /// Generate shell completions.
     Completions {
+        /// Which shell to generate completions for.
         shell: clap_complete::Shell,
     },
+    /// INTERNAL: Command used to run a job step.
     Step {
+        /// Which derivation to run.
         #[arg(long)]
         derivation: PathBuf,
+        /// JSON-serialized environment for the step.
         #[arg(long)]
         env: String,
     },
+    /// INTERNAL: Command used to build a derivation.
     Build {
+        /// Which derivation to build.
         #[arg(long)]
         derivation: PathBuf,
     },

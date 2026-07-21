@@ -18,31 +18,26 @@ use std::{env::temp_dir, fs::create_dir_all, path::PathBuf};
 
 use include_dir::{Dir, include_dir};
 
-static CARGO_TOML: &[u8] = include_bytes!("../Cargo.toml");
-static CARGO_LOCK: &[u8] = include_bytes!("../Cargo.lock");
+static CARGO_TOML: &[u8] = include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/Cargo.toml"));
+static CARGO_LOCK: &[u8] = include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/Cargo.lock"));
 static NIX_DIR: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/nix");
 static SRC_DIR: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/src");
 
 pub(crate) fn create_project_source() -> color_eyre::Result<PathBuf> {
-    let mut tmpdir = temp_dir();
-    tmpdir.push(format!("uneven-{}", uuid::Uuid::new_v4()));
+    let tmpdir = temp_dir().join(format!("uneven-{}", uuid::Uuid::new_v4()));
 
-    let mut nix_dir = tmpdir.clone();
-    nix_dir.push("nix");
+    let nix_dir = tmpdir.join("nix");
     create_dir_all(&nix_dir)?;
     NIX_DIR.extract(&nix_dir)?;
 
-    let mut src_dir = tmpdir.clone();
-    src_dir.push("src");
+    let src_dir = tmpdir.join("src");
     create_dir_all(&src_dir)?;
     SRC_DIR.extract(&src_dir)?;
 
-    let mut cargo_toml = tmpdir.clone();
-    cargo_toml.push("Cargo.toml");
+    let cargo_toml = tmpdir.join("Cargo.toml");
     std::fs::write(cargo_toml, CARGO_TOML)?;
 
-    let mut cargo_lock = tmpdir.clone();
-    cargo_lock.push("Cargo.lock");
+    let cargo_lock = tmpdir.join("Cargo.lock");
     std::fs::write(cargo_lock, CARGO_LOCK)?;
 
     Ok(tmpdir)

@@ -1,6 +1,6 @@
 # uneven
 
-A Nix-based distributed command runner.
+Nix-based distributed command runner.
 
 ## Status
 
