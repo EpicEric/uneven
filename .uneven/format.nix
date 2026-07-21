@@ -4,7 +4,6 @@
       name = "Fix formatting";
       steps = [
         {
-          # name = "Run rustfmt";
           run = ''
             cargo fmt --all
             treefmt

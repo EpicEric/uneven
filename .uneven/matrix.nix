@@ -1,3 +1,5 @@
+# NOTE: This expects you to have registered a remote runner with the "uneven" system feature
+#
 { runner, ... }:
 {
   jobs = {
@@ -6,7 +8,7 @@
         steps = [
           {
             run = ''
-              echo "This shouldn't run"
+              echo "This shouldn't run!"
               exit 1
             '';
           }

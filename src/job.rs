@@ -98,7 +98,7 @@ impl UnevenEnvironment {
                     let upload_path = PathBuf::from(OsStr::from_bytes(buf.trim_ascii()));
                     builder.fetch_derivation(&upload_path, &guard).await?;
                     eprintln!(
-                        "{} Uploaded {} ({})",
+                        "{} Uploaded '{}' ({})",
                         format!("{} step[{}]>", runner, step.name).style(style),
                         upload_key,
                         upload_path.to_string_lossy(),

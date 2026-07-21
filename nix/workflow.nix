@@ -197,7 +197,7 @@ unevenConfig (
             assert lib.assertMsg (lib.isStorePath deriv)
               "derivation argument to runner.steps.build must be a derivation";
             {
-              name = "uneven: Build ${if name == "" then deriv else name}";
+              name = "build ${if name == "" then deriv else name}";
               run = ''
                 uneven build --derivation ${deriv}
               '';
@@ -209,7 +209,7 @@ unevenConfig (
             assert lib.assertMsg (lib.isStorePath deriv)
               "derivation argument to runner.steps.upload must be a derivation";
             {
-              name = "uneven: Upload ${name}";
+              name = "upload ${name}";
               run = ''
                 uneven build --derivation ${deriv}
               '';

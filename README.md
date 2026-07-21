@@ -101,7 +101,9 @@ Still an early work-in-progress. Expect breaking changes and broken functionalit
 }
 ```
 
-Run with:
+It's recommended to keep your workflows in the `.uneven/` directory. For example, `.uneven/workflow.nix`.
+
+Run it with:
 
 ```bash
 uneven run .uneven/workflow.nix
