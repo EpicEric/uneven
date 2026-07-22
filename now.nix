@@ -4,6 +4,18 @@ let
 in
 {
   jobs = {
+    test = { ... }: {
+      name = "Run tests";
+      needs = [
+        "test-env"
+        "test-error"
+        "test-jobs"
+        "test-upload"
+        "test-vars"
+      ];
+      steps = [ { run = "echo Good to go! ^u^"; } ];
+    };
+
     test-env =
       { pkgs, ... }:
       {
@@ -45,6 +57,22 @@ in
                 echo ""
                 echo "=== hint: this means the test works ==="
               fi
+            '';
+          }
+        ];
+      };
+
+    test-jobs =
+      { pkgs, ... }:
+      {
+        name = "Test job dependencies";
+        steps = [
+          {
+            path = [
+              (mkNow pkgs)
+            ];
+            run = ''
+              now run --job b --job x .now/tests/jobs.nix
             '';
           }
         ];

@@ -51,6 +51,9 @@ enum Command {
     Run {
         /// Path to the workflow.
         workflow: PathBuf,
+        /// Jobs to target in this run. If unspecified, all jobs are run.
+        #[arg(long = "job")]
+        jobs: Vec<String>,
         /// Optional dotenv file to read environment variables from.
         #[arg(long)]
         env_file: Option<PathBuf>,
@@ -92,18 +95,26 @@ fn main() -> color_eyre::Result<()> {
     match Command::parse() {
         Command::Run {
             mut workflow,
+            jobs,
             env_file,
             eval,
             checkout,
         } => {
             if workflow.is_dir() {
-                workflow.push("default.nix");
-            }
-            if !workflow.exists() {
+                let now = workflow.join("now.nix");
+                if now.exists() && !now.is_dir() {
+                    workflow = now;
+                } else {
+                    return Err(eyre!(
+                        "Workflow 'now.nix' not found in directory '{}'",
+                        workflow.to_string_lossy()
+                    ));
+                }
+            } else if !workflow.exists() {
                 return Err(eyre!("Workflow '{}' not found", workflow.to_string_lossy()));
             }
             let mut environment = NowEnvironment::get_for_workflow(&workflow, env_file.as_ref())?;
-            environment.run_workflow(workflow, eval, checkout)?;
+            environment.run_workflow(workflow, jobs, eval, checkout)?;
         }
         Command::Completions { shell } => {
             clap_complete::generate(

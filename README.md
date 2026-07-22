@@ -101,14 +101,16 @@ Still an early work-in-progress. Expect breaking changes and broken functionalit
 }
 ```
 
-It's recommended to keep your workflows in the `.now/` directory. For example, `.now/workflow.nix`.
+It's recommended to keep your workflows in the `.now/` directory, or to keep a `now.nix` file.
 
 Run it with:
 
 ```bash
-now run .now/workflow.nix
+now run now.nix
 # --- or ---
-now run --env-file .env .now/workflow.nix
+now run --env-file .env .  # Looks for a now.nix file in the directory
+# --- or ---
+now run --job deploy .     # Runs one or more jobs (and any dependencies)
 ```
 
 ## Tests

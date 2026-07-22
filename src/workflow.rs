@@ -106,6 +106,7 @@ impl NowEnvironment {
     pub(crate) fn run_workflow(
         &mut self,
         workflow_path: PathBuf,
+        jobs: Vec<String>,
         eval: bool,
         strategy: CheckoutStrategy,
     ) -> color_eyre::Result<()> {
@@ -135,7 +136,7 @@ impl NowEnvironment {
                 format!("{}>", builder.get_name()).style(style)
             );
         }
-        let mut tree = workflow.build_graph()?;
+        let mut tree = workflow.build_graph(jobs)?;
 
         let executor = smol::LocalExecutor::new();
 
@@ -256,7 +257,10 @@ enum NowJobNode {
 }
 
 impl NowWorkflow {
-    fn build_graph(self) -> color_eyre::Result<Acyclic<StableDiGraph<NowJobNode, ()>>> {
+    fn build_graph(
+        self,
+        jobs: Vec<String>,
+    ) -> color_eyre::Result<Acyclic<StableDiGraph<NowJobNode, ()>>> {
         let mut graph = StableDiGraph::new();
         let root = graph.add_node(NowJobNode::Root);
 
@@ -302,6 +306,35 @@ impl NowWorkflow {
                     (),
                 );
             }
+        }
+
+        // Prune non-target jobs
+        if !jobs.is_empty() {
+            let job_nodes = jobs
+                .iter()
+                .map(|job_id| {
+                    nodes
+                        .get(job_id)
+                        .map(|index| *index)
+                        .ok_or_else(|| color_eyre::eyre::eyre!("Unknown job '{job_id}'"))
+                })
+                .collect::<color_eyre::Result<HashSet<NodeIndex<u32>>>>()?;
+
+            // Collect the set of nodes to keep
+            let mut keep: HashSet<NodeIndex<u32>> = HashSet::new();
+            let mut stack: Vec<NodeIndex<u32>> = job_nodes.iter().copied().collect();
+            while let Some(node) = stack.pop() {
+                if !keep.insert(node) {
+                    continue;
+                }
+                for dep in graph.neighbors_directed(node, petgraph::Direction::Incoming) {
+                    if dep != root && !keep.contains(&dep) {
+                        stack.push(dep);
+                    }
+                }
+            }
+
+            graph.retain_nodes(|_, node| node == root || keep.contains(&node));
         }
 
         graph.try_into().map_err(|cycle: Cycle<_>| {
