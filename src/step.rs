@@ -1,4 +1,4 @@
-// uneven: A Nix-based distributed command runner
+// now: A Nix-based distributed command runner
 // Copyright (C) 2026 Eric Rodrigues Pires
 //
 // This program is free software: you can redistribute it and/or modify it under
@@ -23,20 +23,18 @@ use std::{
 
 use portable_pty::{CommandBuilder, PtySize, native_pty_system};
 
-use crate::{
-    environment::UnevenEnvironment, secret::SecretStringCollection, workflow::UnevenStepEnvVar,
-};
+use crate::{environment::NowEnvironment, secret::SecretStringCollection, workflow::NowStepEnvVar};
 
-impl UnevenEnvironment {
+impl NowEnvironment {
     pub(crate) fn run_step(
         &self,
         derivation: PathBuf,
-        env: &HashMap<String, UnevenStepEnvVar>,
+        env: &HashMap<String, NowStepEnvVar>,
     ) -> color_eyre::Result<()> {
         let mut secrets: SecretStringCollection = SecretStringCollection::new();
 
         for value in env.values() {
-            let UnevenStepEnvVar::Secret(secret) = value else {
+            let NowStepEnvVar::Secret(secret) = value else {
                 continue;
             };
             let Some(secret) = self.secrets.get(&secret.secret_name) else {

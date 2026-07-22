@@ -1,4 +1,4 @@
-// uneven: A Nix-based distributed command runner
+// now: A Nix-based distributed command runner
 // Copyright (C) 2026 Eric Rodrigues Pires
 //
 // This program is free software: you can redistribute it and/or modify it under
@@ -34,10 +34,10 @@ use smol::{
 
 use crate::{
     CheckoutStrategy,
-    builder::{CheckoutTask, CommandCheckoutTask, NixConfig, UnevenBuilder, remote::RemoteBuilder},
-    environment::UnevenEnvironment,
+    builder::{CheckoutTask, CommandCheckoutTask, NixConfig, NowBuilder, remote::RemoteBuilder},
+    environment::NowEnvironment,
     utils::pipe_outputs_to_stderr,
-    workflow::UnevenJob,
+    workflow::NowJob,
 };
 
 pub(crate) struct LocalBuilder {
@@ -53,7 +53,7 @@ pub(crate) struct LocalBuilder {
 
 impl LocalBuilder {
     pub(crate) fn new(
-        environment: &UnevenEnvironment,
+        environment: &NowEnvironment,
         strategy: CheckoutStrategy,
     ) -> color_eyre::Result<Self> {
         let output = std::process::Command::new("nix")
@@ -98,7 +98,7 @@ impl LocalBuilder {
         }
     }
 
-    pub(crate) fn get_builder(&self, job: &UnevenJob) -> color_eyre::Result<&dyn UnevenBuilder> {
+    pub(crate) fn get_builder(&self, job: &NowJob) -> color_eyre::Result<&dyn NowBuilder> {
         if job.build_system == self.system
             && job
                 .required_system_features
@@ -132,7 +132,7 @@ impl LocalBuilder {
 }
 
 #[async_trait(?Send)]
-impl UnevenBuilder for LocalBuilder {
+impl NowBuilder for LocalBuilder {
     fn acquire(&self) -> Lock<'_, channel::Receiver<()>> {
         self.cancellation_rx.lock()
     }
@@ -149,7 +149,7 @@ impl UnevenBuilder for LocalBuilder {
         match self.strategy {
             CheckoutStrategy::Default => Ok((None, std::env::current_dir()?)),
             CheckoutStrategy::None => {
-                let tmpdir = temp_dir().join(format!("uneven-{}", uuid::Uuid::new_v4()));
+                let tmpdir = temp_dir().join(format!("now-{}", uuid::Uuid::new_v4()));
 
                 let mut command = Command::new("mkdir");
                 command
@@ -172,7 +172,7 @@ impl UnevenBuilder for LocalBuilder {
 
     async fn copy_derivations(
         &self,
-        _job: &UnevenJob,
+        _job: &NowJob,
         _cancellation: &channel::Receiver<()>,
     ) -> color_eyre::Result<()> {
         Ok(())
@@ -233,7 +233,7 @@ impl UnevenBuilder for LocalBuilder {
         derivation: PathBuf,
         envs: HashMap<OsString, OsString>,
     ) -> color_eyre::Result<(Child, PipeReader)> {
-        let mut command = Command::new(derivation.join("bin/uneven-step"));
+        let mut command = Command::new(derivation.join("bin/now-step"));
         let (reader, writer) = std::io::pipe()?;
         command
             .current_dir(cwdir)

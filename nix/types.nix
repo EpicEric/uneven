@@ -1,4 +1,4 @@
-# uneven: A Nix-based distributed command runner
+# now: A Nix-based distributed command runner
 # Copyright (C) 2026 Eric Rodrigues Pires
 #
 # This program is free software: you can redistribute it and/or modify it under
@@ -21,8 +21,8 @@ let
   env = types.attrsOf (
     types.either types.str (
       types.attrTag {
-        __unevenSecret = lib.mkOption { type = types.str; };
-        __unevenDownload = lib.mkOption { type = types.str; };
+        __nowSecret = lib.mkOption { type = types.str; };
+        __nowDownload = lib.mkOption { type = types.str; };
       }
     )
   );
@@ -64,7 +64,7 @@ let
         default = { };
         description = "Environment values to make available to this step.";
       };
-      __unevenUploadKey = lib.mkOption {
+      __nowUploadKey = lib.mkOption {
         type = types.nullOr types.str;
         default = null;
       };

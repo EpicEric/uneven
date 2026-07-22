@@ -34,18 +34,18 @@
       system:
       let
         pkgs = import nixpkgs { inherit system; };
-        inherit (import ./nix { inherit system pkgs; }) uneven shell;
+        inherit (import ./nix { inherit system pkgs; }) now shell;
       in
       {
         packages.${system} = {
-          default = self.packages.${system}.uneven;
-          inherit uneven;
+          default = self.packages.${system}.now;
+          inherit now;
         };
 
         apps.${system}.default = {
           type = "app";
-          program = pkgs.lib.getExe uneven;
-          inherit (uneven) meta;
+          program = pkgs.lib.getExe now;
+          inherit (now) meta;
         };
 
         devShells.${system}.default = shell;

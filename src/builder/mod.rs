@@ -1,4 +1,4 @@
-// uneven: A Nix-based distributed command runner
+// now: A Nix-based distributed command runner
 // Copyright (C) 2026 Eric Rodrigues Pires
 //
 // This program is free software: you can redistribute it and/or modify it under
@@ -27,7 +27,7 @@ use smol::{channel, lock::futures::Lock, process::Child};
 use async_trait::async_trait;
 use serde::Deserialize;
 
-use crate::{utils::pipe_outputs_to_stderr, workflow::UnevenJob};
+use crate::{utils::pipe_outputs_to_stderr, workflow::NowJob};
 
 pub(crate) mod local;
 pub(crate) mod remote;
@@ -67,7 +67,7 @@ impl CheckoutTask for CommandCheckoutTask {
 }
 
 #[async_trait(?Send)]
-pub(crate) trait UnevenBuilder {
+pub(crate) trait NowBuilder {
     fn acquire(&self) -> Lock<'_, channel::Receiver<()>>;
 
     fn get_name(&self) -> String;
@@ -78,7 +78,7 @@ pub(crate) trait UnevenBuilder {
 
     async fn copy_derivations(
         &self,
-        job: &UnevenJob,
+        job: &NowJob,
         cancellation: &channel::Receiver<()>,
     ) -> color_eyre::Result<()>;
 

@@ -1,4 +1,4 @@
-// uneven: A Nix-based distributed command runner
+// now: A Nix-based distributed command runner
 // Copyright (C) 2026 Eric Rodrigues Pires
 //
 // This program is free software: you can redistribute it and/or modify it under
@@ -28,11 +28,11 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     secret::SecretString,
-    workflow::{UnevenJob, UnevenJobContainer, UnevenStepEnvVar, UnevenWorkflow},
+    workflow::{NowJob, NowJobContainer, NowStepEnvVar, NowWorkflow},
 };
 
 #[derive(Debug, Default, Serialize, Deserialize)]
-pub(crate) struct UnevenEnvironment {
+pub(crate) struct NowEnvironment {
     pub(crate) secrets: HashMap<String, SecretString>,
     pub(crate) vars: HashMap<String, String>,
     pub(crate) local_env: HashMap<OsString, OsString>,
@@ -40,7 +40,7 @@ pub(crate) struct UnevenEnvironment {
 }
 
 #[derive(Debug, Default, Deserialize, Serialize)]
-struct UnevenEnvironmentInit {
+struct NowEnvironmentInit {
     #[serde(default)]
     pub(crate) secrets: HashMap<String, String>,
     #[serde(default)]
@@ -49,18 +49,18 @@ struct UnevenEnvironmentInit {
     pub(crate) uploads: HashMap<String, PathBuf>,
 }
 
-static UNEVEN_ENVIRONMENT_KEY: &str = "UNEVEN_ENVIRONMENT";
+static NOW_ENVIRONMENT_KEY: &str = "NOW_ENVIRONMENT";
 
 struct ParsedWorkflow {
     vars: HashSet<String>,
     secrets: HashSet<String>,
 }
 
-impl UnevenEnvironment {
+impl NowEnvironment {
     pub(crate) fn get_for_workflow(
         workflow: &Path,
         env_file: Option<&PathBuf>,
-    ) -> color_eyre::Result<UnevenEnvironment> {
+    ) -> color_eyre::Result<NowEnvironment> {
         let mut env_vars: HashMap<OsString, OsString> = HashMap::new();
         if let Some(env_file) = env_file {
             env_vars.extend(
@@ -153,26 +153,26 @@ impl UnevenEnvironment {
             ));
         }
 
-        let workflow: UnevenWorkflow = serde_json::from_slice(&output.stdout)?;
+        let workflow: NowWorkflow = serde_json::from_slice(&output.stdout)?;
 
         let mut vars: HashSet<String> = HashSet::new();
         let mut secrets: HashSet<String> = HashSet::new();
 
-        let vars_regex = regex::Regex::new(r#"@@__unevenVar_([^@]+)@@"#).expect("valid regex");
+        let vars_regex = regex::Regex::new(r#"@@__nowVar_([^@]+)@@"#).expect("valid regex");
 
-        let mut job_fn = |job: &UnevenJob| {
+        let mut job_fn = |job: &NowJob| {
             for step in &job.steps {
                 for env_value in step.env.values() {
                     match env_value {
-                        UnevenStepEnvVar::Plain(var) => {
+                        NowStepEnvVar::Plain(var) => {
                             vars.extend(vars_regex.captures_iter(var).map(|needle| {
                                 needle.get(1).expect("is match").as_str().to_string()
                             }));
                         }
-                        UnevenStepEnvVar::Secret(secret) => {
+                        NowStepEnvVar::Secret(secret) => {
                             secrets.insert(secret.secret_name.clone());
                         }
-                        UnevenStepEnvVar::Download(_) => {}
+                        NowStepEnvVar::Download(_) => {}
                     }
                 }
             }
@@ -180,8 +180,8 @@ impl UnevenEnvironment {
 
         for job in workflow.jobs.values() {
             match job {
-                UnevenJobContainer::Single(job) => (job_fn)(job),
-                UnevenJobContainer::Multiple(job_vec) => {
+                NowJobContainer::Single(job) => (job_fn)(job),
+                NowJobContainer::Multiple(job_vec) => {
                     for job in job_vec {
                         (job_fn)(job)
                     }
@@ -200,15 +200,15 @@ impl UnevenEnvironment {
         Ok(ParsedWorkflow { vars, secrets })
     }
 
-    pub(crate) fn get_for_step() -> color_eyre::Result<UnevenEnvironment> {
+    pub(crate) fn get_for_step() -> color_eyre::Result<NowEnvironment> {
         let mut env_vars: HashMap<OsString, OsString> = std::env::vars_os().collect();
 
-        let env: UnevenEnvironmentInit =
-            match env_vars.remove(OsStr::from_bytes(UNEVEN_ENVIRONMENT_KEY.as_bytes())) {
+        let env: NowEnvironmentInit =
+            match env_vars.remove(OsStr::from_bytes(NOW_ENVIRONMENT_KEY.as_bytes())) {
                 Some(value) => serde_json::from_slice(value.as_bytes())?,
                 None => {
                     return Err(color_eyre::eyre::eyre!(
-                        "Missing {UNEVEN_ENVIRONMENT_KEY} envvar"
+                        "Missing {NOW_ENVIRONMENT_KEY} envvar"
                     ));
                 }
             };
@@ -239,9 +239,9 @@ impl UnevenEnvironment {
 
     pub(crate) fn generate_env_vars_for_step(
         &self,
-        step_env: &HashMap<String, UnevenStepEnvVar>,
+        step_env: &HashMap<String, NowStepEnvVar>,
     ) -> color_eyre::Result<HashMap<OsString, OsString>> {
-        let mut env_init = UnevenEnvironmentInit {
+        let mut env_init = NowEnvironmentInit {
             uploads: self.uploads.lock().expect("not poisoned").clone(),
             ..Default::default()
         };
@@ -252,10 +252,10 @@ impl UnevenEnvironment {
             let uploads = self.uploads.lock().expect("not poisoned");
             for (key, value) in step_env {
                 match value {
-                    UnevenStepEnvVar::Plain(value) => {
+                    NowStepEnvVar::Plain(value) => {
                         env_init.vars.insert(key.clone(), value.clone());
                     }
-                    UnevenStepEnvVar::Secret(secret) => {
+                    NowStepEnvVar::Secret(secret) => {
                         map.insert(
                             key.into(),
                             self.secrets
@@ -273,7 +273,7 @@ impl UnevenEnvironment {
                             .secrets
                             .insert(key.clone(), secret.secret_name.clone());
                     }
-                    UnevenStepEnvVar::Download(download) => {
+                    NowStepEnvVar::Download(download) => {
                         let download_path =
                             uploads.get(&download.download_name).ok_or_else(|| {
                                 color_eyre::eyre::eyre!(
@@ -300,7 +300,7 @@ impl UnevenEnvironment {
         }
 
         map.insert(
-            UNEVEN_ENVIRONMENT_KEY.into(),
+            NOW_ENVIRONMENT_KEY.into(),
             serde_json::to_string(&env_init)?.into(),
         );
 

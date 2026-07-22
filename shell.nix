@@ -1,4 +1,4 @@
-# uneven: A Nix-based distributed command runner
+# now: A Nix-based distributed command runner
 # Copyright (C) 2026 Eric Rodrigues Pires
 #
 # This program is free software: you can redistribute it and/or modify it under

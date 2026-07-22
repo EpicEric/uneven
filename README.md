@@ -1,4 +1,4 @@
-# uneven
+# now
 
 Nix-based distributed command runner.
 
@@ -101,20 +101,20 @@ Still an early work-in-progress. Expect breaking changes and broken functionalit
 }
 ```
 
-It's recommended to keep your workflows in the `.uneven/` directory. For example, `.uneven/workflow.nix`.
+It's recommended to keep your workflows in the `.now/` directory. For example, `.now/workflow.nix`.
 
 Run it with:
 
 ```bash
-uneven run .uneven/workflow.nix
+now run .now/workflow.nix
 # --- or ---
-uneven run --env-file .env .uneven/workflow.nix
+now run --env-file .env .now/workflow.nix
 ```
 
 ## Tests
 
-uneven is tested with itself:
+now is tested with itself:
 
 ```bash
-nix run . -- run uneven.nix
+nix run . -- run now.nix
 ```

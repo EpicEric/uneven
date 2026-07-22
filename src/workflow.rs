@@ -1,4 +1,4 @@
-// uneven: A Nix-based distributed command runner
+// now: A Nix-based distributed command runner
 // Copyright (C) 2026 Eric Rodrigues Pires
 //
 // This program is free software: you can redistribute it and/or modify it under
@@ -32,26 +32,26 @@ use smol::{channel, stream::StreamExt};
 
 use crate::{
     CheckoutStrategy,
-    builder::{UnevenBuilder, local::LocalBuilder},
-    environment::UnevenEnvironment,
+    builder::{NowBuilder, local::LocalBuilder},
+    environment::NowEnvironment,
     project::create_project_source,
 };
 
 #[derive(Debug, Deserialize)]
-pub(crate) struct UnevenWorkflow {
+pub(crate) struct NowWorkflow {
     pub(crate) name: Option<String>,
-    pub(crate) jobs: HashMap<String, UnevenJobContainer>,
+    pub(crate) jobs: HashMap<String, NowJobContainer>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
-pub(crate) enum UnevenJobContainer {
-    Single(UnevenJob),
-    Multiple(Vec<UnevenJob>),
+pub(crate) enum NowJobContainer {
+    Single(NowJob),
+    Multiple(Vec<NowJob>),
 }
 
 #[derive(Debug, Deserialize)]
-pub(crate) struct UnevenJob {
+pub(crate) struct NowJob {
     pub(crate) name: String,
     #[serde(rename = "buildSystem")]
     pub(crate) build_system: String,
@@ -59,50 +59,50 @@ pub(crate) struct UnevenJob {
     pub(crate) _host_system: String,
     #[serde(rename = "requiredSystemFeatures")]
     pub(crate) required_system_features: HashSet<String>,
-    pub(crate) strategy: Option<UnevenStrategy>,
+    pub(crate) strategy: Option<NowStrategy>,
     pub(crate) needs: Option<Vec<String>>,
-    pub(crate) steps: Vec<UnevenStep>,
+    pub(crate) steps: Vec<NowStep>,
 }
 
 #[derive(Debug, Deserialize)]
-pub(crate) struct UnevenStrategy {
+pub(crate) struct NowStrategy {
     #[serde(rename = "fail-fast")]
     pub(crate) fail_fast: bool,
 }
 
 #[derive(Debug, Deserialize)]
-pub(crate) struct UnevenStep {
+pub(crate) struct NowStep {
     pub(crate) name: String,
     #[serde(rename = "runDrv", default)]
     pub(crate) run_drv: PathBuf,
     #[serde(rename = "teardownDrv", default)]
     pub(crate) teardown_drv: Option<PathBuf>,
-    pub(crate) env: HashMap<String, UnevenStepEnvVar>,
-    #[serde(rename = "__unevenUploadKey", default)]
+    pub(crate) env: HashMap<String, NowStepEnvVar>,
+    #[serde(rename = "__nowUploadKey", default)]
     pub(crate) upload_key: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(untagged)]
-pub(crate) enum UnevenStepEnvVar {
+pub(crate) enum NowStepEnvVar {
     Plain(String),
-    Secret(UnevenStepSecret),
-    Download(UnevenStepDownload),
+    Secret(NowStepSecret),
+    Download(NowStepDownload),
 }
 
 #[derive(Clone, Debug, Deserialize)]
-pub(crate) struct UnevenStepSecret {
-    #[serde(rename = "__unevenSecret")]
+pub(crate) struct NowStepSecret {
+    #[serde(rename = "__nowSecret")]
     pub(crate) secret_name: String,
 }
 
 #[derive(Clone, Debug, Deserialize)]
-pub(crate) struct UnevenStepDownload {
-    #[serde(rename = "__unevenDownload")]
+pub(crate) struct NowStepDownload {
+    #[serde(rename = "__nowDownload")]
     pub(crate) download_name: String,
 }
 
-impl UnevenEnvironment {
+impl NowEnvironment {
     pub(crate) fn run_workflow(
         &mut self,
         workflow_path: PathBuf,
@@ -173,14 +173,14 @@ impl UnevenEnvironment {
                 for node in current_nodes {
                     let node = tree.remove_node(node).expect("node exists");
                     match node {
-                        UnevenJobNode::Root => {
+                        NowJobNode::Root => {
                             debug_assert!(tree.node_count() == 0);
                             break 'tree;
                         }
-                        UnevenJobNode::Single(job) => {
+                        NowJobNode::Single(job) => {
                             futures.push(self.run_job_single(&builder, job));
                         }
-                        UnevenJobNode::Multiple(job_vec) => {
+                        NowJobNode::Multiple(job_vec) => {
                             let (fail_fast, no_fail_fast) =
                                 self.run_jobs_multiple(&builder, job_vec)?;
                             futures.push(fail_fast);
@@ -203,7 +203,7 @@ impl UnevenEnvironment {
         smol::future::block_on(executor.run(smol::future::or(workflow_task, ctrl_c_task)))
     }
 
-    fn evaluate_workflow(&self, workflow: &Path) -> color_eyre::Result<UnevenWorkflow> {
+    fn evaluate_workflow(&self, workflow: &Path) -> color_eyre::Result<NowWorkflow> {
         let workflow_canonical = std::fs::canonicalize(workflow)?;
         let workflow_str = workflow_canonical
             .to_str()
@@ -249,41 +249,41 @@ impl UnevenEnvironment {
 }
 
 #[derive(Debug)]
-enum UnevenJobNode {
+enum NowJobNode {
     Root,
-    Single(UnevenJob),
-    Multiple(Vec<UnevenJob>),
+    Single(NowJob),
+    Multiple(Vec<NowJob>),
 }
 
-impl UnevenWorkflow {
-    fn build_graph(self) -> color_eyre::Result<Acyclic<StableDiGraph<UnevenJobNode, ()>>> {
+impl NowWorkflow {
+    fn build_graph(self) -> color_eyre::Result<Acyclic<StableDiGraph<NowJobNode, ()>>> {
         let mut graph = StableDiGraph::new();
-        let root = graph.add_node(UnevenJobNode::Root);
+        let root = graph.add_node(NowJobNode::Root);
 
         let mut nodes: HashMap<String, NodeIndex<u32>> = HashMap::new();
         let mut edges: HashMap<String, HashSet<String>> = HashMap::new();
 
         for (job_id, job) in self.jobs.into_iter() {
             match job {
-                UnevenJobContainer::Single(job) => {
+                NowJobContainer::Single(job) => {
                     for need in job.needs.iter().flatten() {
                         edges
                             .entry(job_id.clone())
                             .or_default()
                             .insert(need.clone());
                     }
-                    let node = graph.add_node(UnevenJobNode::Single(job));
+                    let node = graph.add_node(NowJobNode::Single(job));
                     nodes.insert(job_id, node);
                     graph.add_edge(node, root, ());
                 }
-                UnevenJobContainer::Multiple(job_vec) => {
+                NowJobContainer::Multiple(job_vec) => {
                     for need in job_vec.iter().flat_map(|job| job.needs.iter().flatten()) {
                         edges
                             .entry(job_id.clone())
                             .or_default()
                             .insert(need.clone());
                     }
-                    let node = graph.add_node(UnevenJobNode::Multiple(job_vec));
+                    let node = graph.add_node(NowJobNode::Multiple(job_vec));
                     nodes.insert(job_id, node);
                     graph.add_edge(node, root, ());
                 }

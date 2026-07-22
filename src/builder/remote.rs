@@ -1,4 +1,4 @@
-// uneven: A Nix-based distributed command runner
+// now: A Nix-based distributed command runner
 // Copyright (C) 2026 Eric Rodrigues Pires
 //
 // This program is free software: you can redistribute it and/or modify it under
@@ -37,9 +37,9 @@ use smol::{
 
 use crate::{
     CheckoutStrategy,
-    builder::{CheckoutTask, CommandCheckoutTask, NixConfig, UnevenBuilder},
+    builder::{CheckoutTask, CommandCheckoutTask, NixConfig, NowBuilder},
     utils::{escape_os_string, pipe_outputs_to_stderr},
-    workflow::UnevenJob,
+    workflow::NowJob,
 };
 
 struct RsyncCheckoutTask {
@@ -179,7 +179,7 @@ impl RemoteBuilder {
 }
 
 #[async_trait(?Send)]
-impl UnevenBuilder for RemoteBuilder {
+impl NowBuilder for RemoteBuilder {
     fn acquire(&self) -> Lock<'_, channel::Receiver<()>> {
         self.cancellation_rx.lock()
     }
@@ -206,7 +206,7 @@ impl UnevenBuilder for RemoteBuilder {
     fn checkout(&self) -> color_eyre::Result<(Option<Box<dyn CheckoutTask>>, PathBuf)> {
         match self.strategy {
             CheckoutStrategy::Default => {
-                let tmpdir = format!("uneven-{}", uuid::Uuid::new_v4());
+                let tmpdir = format!("now-{}", uuid::Uuid::new_v4());
 
                 let mut command = Command::new("rsync");
                 command
@@ -251,7 +251,7 @@ impl UnevenBuilder for RemoteBuilder {
                 ))
             }
             CheckoutStrategy::None => {
-                let tmpdir = format!("uneven-{}", uuid::Uuid::new_v4());
+                let tmpdir = format!("now-{}", uuid::Uuid::new_v4());
 
                 let mut command = Command::new("ssh");
                 if let Some(ssh_identity) = self.ssh_identity.as_ref() {
@@ -276,7 +276,7 @@ impl UnevenBuilder for RemoteBuilder {
 
     async fn copy_derivations(
         &self,
-        job: &UnevenJob,
+        job: &NowJob,
         cancellation: &channel::Receiver<()>,
     ) -> color_eyre::Result<()> {
         let mut command = Command::new("nix");
@@ -438,7 +438,7 @@ impl UnevenBuilder for RemoteBuilder {
             full_command.push(" ");
         }
 
-        full_command.push(derivation.join("bin/uneven-step"));
+        full_command.push(derivation.join("bin/now-step"));
 
         let mut command = Command::new("ssh");
         if let Some(ssh_identity) = self.ssh_identity.as_ref() {

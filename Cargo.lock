@@ -867,6 +867,32 @@ dependencies = [
 ]
 
 [[package]]
+name = "now-runner"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "clap",
+ "clap_complete",
+ "color-eyre",
+ "ctrlc",
+ "dotenvy",
+ "futures",
+ "ignore",
+ "include_dir",
+ "owo-colors",
+ "petgraph",
+ "portable-pty",
+ "rand",
+ "regex",
+ "serde",
+ "serde_json",
+ "smol",
+ "sys-info",
+ "uuid",
+ "zeroize",
+]
+
+[[package]]
 name = "objc2"
 version = "0.6.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1306,32 +1332,6 @@ dependencies = [
  "sharded-slab",
  "thread_local",
  "tracing-core",
-]
-
-[[package]]
-name = "uneven"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "clap",
- "clap_complete",
- "color-eyre",
- "ctrlc",
- "dotenvy",
- "futures",
- "ignore",
- "include_dir",
- "owo-colors",
- "petgraph",
- "portable-pty",
- "rand",
- "regex",
- "serde",
- "serde_json",
- "smol",
- "sys-info",
- "uuid",
- "zeroize",
 ]
 
 [[package]]

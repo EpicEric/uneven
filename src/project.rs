@@ -1,4 +1,4 @@
-// uneven: A Nix-based distributed command runner
+// now: A Nix-based distributed command runner
 // Copyright (C) 2026 Eric Rodrigues Pires
 //
 // This program is free software: you can redistribute it and/or modify it under
@@ -24,7 +24,7 @@ static NIX_DIR: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/nix");
 static SRC_DIR: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/src");
 
 pub(crate) fn create_project_source() -> color_eyre::Result<PathBuf> {
-    let tmpdir = temp_dir().join(format!("uneven-{}", uuid::Uuid::new_v4()));
+    let tmpdir = temp_dir().join(format!("now-{}", uuid::Uuid::new_v4()));
 
     let nix_dir = tmpdir.join("nix");
     create_dir_all(&nix_dir)?;

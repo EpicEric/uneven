@@ -8,7 +8,7 @@ let
     fetchTarball "https://github.com/oxalica/rust-overlay/archive/master.tar.gz"
   );
 
-  mkUneven = pkgs: import ../. { inherit pkgs; };
+  mkNow = pkgs: import ../. { inherit pkgs; };
 in
 {
   jobs = {
@@ -31,7 +31,7 @@ in
         (
           { pkgs, name, ... }: {
             name = "Build on ${name}";
-            steps = [ (runner.steps.build "uneven" (mkUneven pkgs)) ];
+            steps = [ (runner.steps.build "now" (mkNow pkgs)) ];
           }
         );
 
@@ -166,9 +166,9 @@ in
               (lib.mkIf (pkgs.stdenv.hostPlatform.isLinux) (
                 runner.steps.upload "docker-${pkgs.stdenv.hostPlatform.system}" (
                   pkgs.dockerTools.buildLayeredImage {
-                    name = "uneven";
+                    name = "now";
                     tag = "latest";
-                    config.Entrypoint = [ (lib.getExe (mkUneven pkgs)) ];
+                    config.Entrypoint = [ (lib.getExe (mkNow pkgs)) ];
                   }
                 )
               ))
@@ -223,8 +223,8 @@ in
                     map ({ image, tag }: "${image}:${tag}") (
                       lib.cartesianProduct {
                         image = [
-                          "${runner.vars.DOCKERHUB_USERNAME}/uneven"
-                          "ghcr.io/${runner.vars.GITHUB_USERNAME}/uneven"
+                          "${runner.vars.DOCKERHUB_USERNAME}/now"
+                          "ghcr.io/${runner.vars.GITHUB_USERNAME}/now"
                         ];
                         tag = [
                           "latest"

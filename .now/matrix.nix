@@ -1,4 +1,4 @@
-# NOTE: This expects you to have registered a remote runner with the "uneven" system feature
+# NOTE: This expects you to have registered a remote runner with the "now" system feature
 #
 { runner, ... }:
 {
@@ -29,7 +29,7 @@
       }
     );
 
-    remote = runner.matrix [ { requiredSystemFeatures = [ "uneven" ]; } ] (
+    remote = runner.matrix [ { requiredSystemFeatures = [ "now" ]; } ] (
       { ... }: {
         steps = [
           {

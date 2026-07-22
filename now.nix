@@ -1,6 +1,6 @@
 { ... }:
 let
-  mkUneven = pkgs: import ./. { inherit pkgs; };
+  mkNow = pkgs: import ./. { inherit pkgs; };
 in
 {
   jobs = {
@@ -15,10 +15,10 @@ in
               MY_SECRET = "This is a secret";
             };
             path = [
-              (mkUneven pkgs)
+              (mkNow pkgs)
             ];
             run = ''
-              uneven run .uneven/tests/env.nix
+              now run .now/tests/env.nix
             '';
           }
         ];
@@ -31,13 +31,13 @@ in
         steps = [
           {
             path = [
-              (mkUneven pkgs)
+              (mkNow pkgs)
             ];
             run = ''
               # Ensure the test evaluates just fine
-              uneven run --eval .uneven/tests/error.nix
+              now run --eval .now/tests/error.nix
 
-              uneven run .uneven/tests/error.nix || error_code=$?
+              now run .now/tests/error.nix || error_code=$?
               if [ "$error_code" -eq 0 ]; then
                 echo "Test shouldn't have succeeded!"
                 exit 1
@@ -57,10 +57,10 @@ in
         steps = [
           {
             path = [
-              (mkUneven pkgs)
+              (mkNow pkgs)
             ];
             run = ''
-              uneven run .uneven/tests/upload.nix
+              now run .now/tests/upload.nix
             '';
           }
         ];
@@ -79,10 +79,10 @@ in
               TEST_SECOND_SECRET = "second secret";
             };
             path = [
-              (mkUneven pkgs)
+              (mkNow pkgs)
             ];
             run = ''
-              uneven run .uneven/tests/vars.nix
+              now run .now/tests/vars.nix
             '';
           }
         ];

@@ -1,4 +1,4 @@
-// uneven: A Nix-based distributed command runner
+// now: A Nix-based distributed command runner
 // Copyright (C) 2026 Eric Rodrigues Pires
 //
 // This program is free software: you can redistribute it and/or modify it under
@@ -27,15 +27,15 @@ use owo_colors::OwoColorize;
 use smol::stream::StreamExt;
 
 use crate::{
-    builder::{UnevenBuilder, local::LocalBuilder},
-    environment::UnevenEnvironment,
-    workflow::{UnevenJob, UnevenStepEnvVar},
+    builder::{NowBuilder, local::LocalBuilder},
+    environment::NowEnvironment,
+    workflow::{NowJob, NowStepEnvVar},
 };
 
 type JobResult<'a> = Pin<Box<dyn Future<Output = color_eyre::Result<()>> + 'a>>;
 
-impl UnevenEnvironment {
-    async fn run_job(&self, builder: &dyn UnevenBuilder, job: UnevenJob) -> color_eyre::Result<()> {
+impl NowEnvironment {
+    async fn run_job(&self, builder: &dyn NowBuilder, job: NowJob) -> color_eyre::Result<()> {
         let guard = builder.acquire().await;
         let style = builder.get_style();
         let runner = builder.get_name();
@@ -66,7 +66,7 @@ impl UnevenEnvironment {
                 {
                     let uploads = self.uploads.lock().expect("not poisoned");
                     for env in step.env.values() {
-                        if let UnevenStepEnvVar::Download(download) = env {
+                        if let NowStepEnvVar::Download(download) = env {
                             if let Some(path) = uploads.get(&download.download_name) {
                                 downloads.push(path.clone());
                             } else {
@@ -166,7 +166,7 @@ impl UnevenEnvironment {
     pub(crate) fn run_job_single<'a>(
         &'a self,
         local_builder: &'a LocalBuilder,
-        job: UnevenJob,
+        job: NowJob,
     ) -> Pin<Box<dyn Future<Output = color_eyre::Result<()>> + 'a>> {
         Box::pin(self.run_job(local_builder, job))
     }
@@ -174,7 +174,7 @@ impl UnevenEnvironment {
     pub(crate) fn run_jobs_multiple<'a>(
         &'a self,
         local_builder: &'a LocalBuilder,
-        jobs: Vec<UnevenJob>,
+        jobs: Vec<NowJob>,
     ) -> color_eyre::Result<(JobResult<'a>, JobResult<'a>)> {
         let fail_fast = FuturesUnordered::new();
         let no_fail_fast = FuturesUnordered::new();

@@ -1,4 +1,4 @@
-# uneven: A Nix-based distributed command runner
+# now: A Nix-based distributed command runner
 # Copyright (C) 2026 Eric Rodrigues Pires
 #
 # This program is free software: you can redistribute it and/or modify it under
@@ -17,7 +17,7 @@
 {
   system ? builtins.currentSystem,
   pkgs ? import <nixpkgs> { inherit system; },
-  mkUneven ? pkgs': (import ./. { pkgs = pkgs'; }).uneven,
+  mkNow ? pkgs': (import ./. { pkgs = pkgs'; }).now,
 }:
 
 let
@@ -64,7 +64,7 @@ let
       script =
         text:
         writeTextFile {
-          name = "uneven-step-script";
+          name = "now-step-script";
           text = ''
             #! ${lib.getExe (if step.shell == null then pkgs'.bash else step.shell)} ${
               lib.optionalString (step.shellArgs != null) (lib.escapeShellArgs step.shellArgs)
@@ -86,10 +86,10 @@ let
 
       runDrv =
         (writeShellApplication {
-          name = "uneven-step";
-          runtimeInputs = step.path ++ [ (mkUneven pkgs') ];
+          name = "now-step";
+          runtimeInputs = step.path ++ [ (mkNow pkgs') ];
           text = ''
-            uneven step \
+            now step \
               --derivation ${script step.run} \
               --env ${lib.strings.escapeShellArg (builtins.toJSON env')}
           '';
@@ -100,10 +100,10 @@ let
           null
         else
           (writeShellApplication {
-            name = "uneven-step";
-            runtimeInputs = step.path ++ [ (mkUneven pkgs') ];
+            name = "now-step";
+            runtimeInputs = step.path ++ [ (mkNow pkgs') ];
             text = ''
-              uneven step \
+              now step \
                 --derivation ${script step.teardown} \
                 --env ${lib.strings.escapeShellArg (builtins.toJSON env')}
             '';
@@ -111,10 +111,10 @@ let
 
       env = env';
 
-      __unevenUploadKey = step.__unevenUploadKey or null;
+      __nowUploadKey = step.__nowUploadKey or null;
     };
 
-  unevenConfig =
+  nowConfig =
     module:
     module.config
     // {
@@ -141,7 +141,7 @@ let
       ) module.config.jobs;
     };
 
-  unevenModule =
+  nowModule =
     { lib, ... }:
     let
       inherit (lib) types;
@@ -163,17 +163,17 @@ in
 
 workflow:
 { secrets, vars }:
-unevenConfig (
+nowConfig (
   lib.evalModules {
-    class = "uneven";
+    class = "now";
     modules = [
-      unevenModule
+      nowModule
       workflow
     ];
     specialArgs = {
       runner = {
         secrets = lib.genAttrs secrets (name: {
-          __unevenSecret = name;
+          __nowSecret = name;
         });
 
         inherit vars;
@@ -200,7 +200,7 @@ unevenConfig (
             {
               name = "build ${if name == "" then deriv else name}";
               run = ''
-                uneven build --derivation ${deriv}
+                now build --derivation ${deriv}
               '';
             };
 
@@ -212,14 +212,14 @@ unevenConfig (
             {
               name = "upload ${name}";
               run = ''
-                uneven build --derivation ${deriv}
+                now build --derivation ${deriv}
               '';
-              __unevenUploadKey = name;
+              __nowUploadKey = name;
             };
         };
 
         download = name: {
-          __unevenDownload = name;
+          __nowDownload = name;
         };
       };
     };

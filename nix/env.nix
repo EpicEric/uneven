@@ -1,4 +1,4 @@
-# uneven: A Nix-based distributed command runner
+# now: A Nix-based distributed command runner
 # Copyright (C) 2026 Eric Rodrigues Pires
 #
 # This program is free software: you can redistribute it and/or modify it under
@@ -24,7 +24,7 @@ let
   inherit (pkgs) lib;
   env = {
     secrets = allVarNames;
-    vars = lib.genAttrs allVarNames (name: "@@__unevenVar_${name}@@");
+    vars = lib.genAttrs allVarNames (name: "@@__nowVar_${name}@@");
   };
 in
 import ./workflow.nix { inherit system pkgs; } workflow env

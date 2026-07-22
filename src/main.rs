@@ -1,4 +1,4 @@
-// uneven: A Nix-based distributed command runner
+// now: A Nix-based distributed command runner
 // Copyright (C) 2026 Eric Rodrigues Pires
 //
 // This program is free software: you can redistribute it and/or modify it under
@@ -23,7 +23,7 @@ use std::{
 use clap::{CommandFactory, Parser, ValueEnum};
 use color_eyre::eyre::eyre;
 
-use crate::environment::UnevenEnvironment;
+use crate::environment::NowEnvironment;
 
 mod builder;
 mod environment;
@@ -102,8 +102,7 @@ fn main() -> color_eyre::Result<()> {
             if !workflow.exists() {
                 return Err(eyre!("Workflow '{}' not found", workflow.to_string_lossy()));
             }
-            let mut environment =
-                UnevenEnvironment::get_for_workflow(&workflow, env_file.as_ref())?;
+            let mut environment = NowEnvironment::get_for_workflow(&workflow, env_file.as_ref())?;
             environment.run_workflow(workflow, eval, checkout)?;
         }
         Command::Completions { shell } => {
@@ -115,7 +114,7 @@ fn main() -> color_eyre::Result<()> {
             );
         }
         Command::Step { derivation, env } => {
-            let environment = UnevenEnvironment::get_for_step()?;
+            let environment = NowEnvironment::get_for_step()?;
             environment.run_step(derivation, &serde_json::from_str(&env)?)?;
         }
         Command::Build { derivation } => {

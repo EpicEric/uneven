@@ -1,4 +1,4 @@
-# uneven: A Nix-based distributed command runner
+# now: A Nix-based distributed command runner
 # Copyright (C) 2026 Eric Rodrigues Pires
 #
 # This program is free software: you can redistribute it and/or modify it under
@@ -26,7 +26,7 @@
   stdenv,
 }:
 rustPlatform.buildRustPackage {
-  pname = "uneven";
+  pname = "now";
   version = (lib.importTOML ../Cargo.toml).package.version;
 
   inherit src;
@@ -43,7 +43,7 @@ rustPlatform.buildRustPackage {
   doCheck = false;
 
   postInstall = ''
-    wrapProgram $out/bin/uneven \
+    wrapProgram $out/bin/now \
       --suffix PATH : ${
         lib.makeBinPath [
           nix
@@ -53,18 +53,18 @@ rustPlatform.buildRustPackage {
       }
   ''
   + lib.optionalString (stdenv.buildPlatform.canExecute stdenv.hostPlatform) ''
-    installShellCompletion --cmd uneven \
-      --bash <($out/bin/uneven completions bash) \
-      --fish <($out/bin/uneven completions fish) \
-      --zsh <($out/bin/uneven completions zsh)
+    installShellCompletion --cmd now \
+      --bash <($out/bin/now completions bash) \
+      --fish <($out/bin/now completions fish) \
+      --zsh <($out/bin/now completions zsh)
   '';
 
   meta = {
-    name = "uneven";
+    name = "now";
     description = "Nix-based distributed command runner";
-    homepage = "https://github.com/EpicEric/uneven";
+    homepage = "https://github.com/EpicEric/now";
     license = lib.licenses.agpl3Plus;
-    mainProgram = "uneven";
+    mainProgram = "now";
     platforms = lib.platforms.all;
   };
 }
