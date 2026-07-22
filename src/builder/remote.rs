@@ -21,24 +21,61 @@ use std::{
     io::PipeReader,
     os::unix::ffi::OsStrExt,
     path::{Path, PathBuf},
+    pin::Pin,
 };
 
 use async_trait::async_trait;
+use futures::FutureExt;
 use owo_colors::Style;
 use rand::{SeedableRng, seq::IndexedRandom};
 use smol::{
     channel,
-    io::AsyncReadExt,
+    io::{AsyncReadExt, AsyncWriteExt},
     lock::{Mutex, futures::Lock},
     process::{Child, Command, Stdio},
 };
 
 use crate::{
     CheckoutStrategy,
-    builder::{NixConfig, UnevenBuilder},
+    builder::{CheckoutTask, CommandCheckoutTask, NixConfig, UnevenBuilder},
     utils::{escape_os_string, pipe_outputs_to_stderr},
     workflow::UnevenJob,
 };
+
+struct RsyncCheckoutTask {
+    builder: String,
+    child: Child,
+    stdin_future: Pin<Box<dyn Future<Output = color_eyre::Result<()>>>>,
+}
+
+impl Drop for RsyncCheckoutTask {
+    fn drop(&mut self) {
+        let _ = self.child.kill();
+    }
+}
+
+impl CheckoutTask for RsyncCheckoutTask {
+    fn run<'a>(&'a mut self) -> Pin<Box<dyn Future<Output = color_eyre::Result<()>> + 'a>> {
+        Box::pin(
+            smol::future::zip(
+                async {
+                    let status = self.child.status().await?;
+                    if status.success() {
+                        Ok(())
+                    } else {
+                        pipe_outputs_to_stderr(&mut self.child).await?;
+                        Err(color_eyre::eyre::eyre!(
+                            "Failed to checkout current directory to {}",
+                            self.builder
+                        ))
+                    }
+                },
+                &mut self.stdin_future,
+            )
+            .map(|(first, second)| first.and(second)),
+        )
+    }
+}
 
 pub(crate) struct RemoteBuilder {
     pub(crate) cancellation: channel::Sender<()>,
@@ -166,41 +203,52 @@ impl UnevenBuilder for RemoteBuilder {
         .expect("not empty")
     }
 
-    fn checkout(&self) -> color_eyre::Result<(Option<Child>, PathBuf)> {
+    fn checkout(&self) -> color_eyre::Result<(Option<Box<dyn CheckoutTask>>, PathBuf)> {
         match self.strategy {
             CheckoutStrategy::Default => {
                 let tmpdir = format!("uneven-{}", uuid::Uuid::new_v4());
 
-                let files_to_copy: Vec<PathBuf> = ignore::Walk::new(std::env::current_dir()?)
-                    .filter_map(|dir_entry| {
-                        dir_entry.ok().and_then(|dir_entry| {
-                            let pathbuf = dir_entry.into_path();
-                            if pathbuf.is_file() {
-                                Some(pathbuf)
-                            } else {
-                                None
-                            }
-                        })
-                    })
-                    .collect();
-
                 let mut command = Command::new("rsync");
-                command.arg("-az");
-                for file in files_to_copy {
-                    command.arg("--include").arg(file);
-                }
                 command
-                    .args(["--exclude='*'", "."])
+                    .args(["-arz", "--files-from=-", "."])
                     .arg(format!(
                         "{}:{}",
                         self.ssh_uri.strip_prefix("ssh://").unwrap_or(&self.ssh_uri),
                         tmpdir
                     ))
-                    .stdin(Stdio::null())
+                    .stdin(Stdio::piped())
                     .stdout(Stdio::piped())
                     .stderr(Stdio::piped());
 
-                Ok((Some(command.spawn()?), PathBuf::from(tmpdir)))
+                let mut child = command.spawn()?;
+                let mut stdin = child.stdin.take().expect("stdin is piped");
+                let stdin_future = Box::pin(async move {
+                    let cwd = std::env::current_dir()?;
+                    for dir_entry in ignore::Walk::new(std::env::current_dir()?).flatten() {
+                        if dir_entry.file_type().is_some_and(|typ| typ.is_file()) {
+                            let path = dir_entry.path();
+                            stdin
+                                .write_all(
+                                    path.strip_prefix(&cwd)
+                                        .unwrap_or(path)
+                                        .as_os_str()
+                                        .as_bytes(),
+                                )
+                                .await?;
+                            stdin.write_all(b"\n").await?;
+                        }
+                    }
+                    Ok(stdin.flush().await?)
+                });
+
+                Ok((
+                    Some(Box::new(RsyncCheckoutTask {
+                        builder: self.get_name(),
+                        child,
+                        stdin_future,
+                    })),
+                    PathBuf::from(tmpdir),
+                ))
             }
             CheckoutStrategy::None => {
                 let tmpdir = format!("uneven-{}", uuid::Uuid::new_v4());
@@ -215,7 +263,13 @@ impl UnevenBuilder for RemoteBuilder {
                     .stdout(Stdio::piped())
                     .stderr(Stdio::piped());
 
-                Ok((Some(command.spawn()?), PathBuf::from(tmpdir)))
+                Ok((
+                    Some(Box::new(CommandCheckoutTask {
+                        builder: self.get_name(),
+                        child: command.spawn()?,
+                    })),
+                    PathBuf::from(tmpdir),
+                ))
             }
         }
     }

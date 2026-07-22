@@ -19,6 +19,7 @@ use std::{
     ffi::OsString,
     io::PipeReader,
     path::{Path, PathBuf},
+    pin::Pin,
 };
 
 use smol::{channel, lock::futures::Lock, process::Child};
@@ -26,10 +27,44 @@ use smol::{channel, lock::futures::Lock, process::Child};
 use async_trait::async_trait;
 use serde::Deserialize;
 
-use crate::workflow::UnevenJob;
+use crate::{utils::pipe_outputs_to_stderr, workflow::UnevenJob};
 
 pub(crate) mod local;
 pub(crate) mod remote;
+
+pub(crate) trait CheckoutTask {
+    fn run<'a>(&'a mut self) -> Pin<Box<dyn Future<Output = color_eyre::Result<()>> + 'a>>;
+}
+
+struct CommandCheckoutTask {
+    pub(crate) builder: String,
+    pub(crate) child: Child,
+}
+
+impl Drop for CommandCheckoutTask {
+    fn drop(&mut self) {
+        let _ = self.child.kill();
+    }
+}
+
+impl CheckoutTask for CommandCheckoutTask {
+    fn run<'a>(
+        &'a mut self,
+    ) -> std::pin::Pin<Box<dyn Future<Output = color_eyre::Result<()>> + 'a>> {
+        Box::pin(async {
+            let status = self.child.status().await?;
+            if status.success() {
+                Ok(())
+            } else {
+                pipe_outputs_to_stderr(&mut self.child).await?;
+                Err(color_eyre::eyre::eyre!(
+                    "Failed to checkout current directory to {}",
+                    self.builder
+                ))
+            }
+        })
+    }
+}
 
 #[async_trait(?Send)]
 pub(crate) trait UnevenBuilder {
@@ -39,7 +74,7 @@ pub(crate) trait UnevenBuilder {
 
     fn get_style(&self) -> owo_colors::Style;
 
-    fn checkout(&self) -> color_eyre::Result<(Option<Child>, PathBuf)>;
+    fn checkout(&self) -> color_eyre::Result<(Option<Box<dyn CheckoutTask>>, PathBuf)>;
 
     async fn copy_derivations(
         &self,

@@ -34,7 +34,7 @@ use smol::{
 
 use crate::{
     CheckoutStrategy,
-    builder::{NixConfig, UnevenBuilder, remote::RemoteBuilder},
+    builder::{CheckoutTask, CommandCheckoutTask, NixConfig, UnevenBuilder, remote::RemoteBuilder},
     environment::UnevenEnvironment,
     utils::pipe_outputs_to_stderr,
     workflow::UnevenJob,
@@ -145,7 +145,7 @@ impl UnevenBuilder for LocalBuilder {
         Style::new().blue()
     }
 
-    fn checkout(&self) -> color_eyre::Result<(Option<Child>, PathBuf)> {
+    fn checkout(&self) -> color_eyre::Result<(Option<Box<dyn CheckoutTask>>, PathBuf)> {
         match self.strategy {
             CheckoutStrategy::Default => Ok((None, std::env::current_dir()?)),
             CheckoutStrategy::None => {
@@ -159,7 +159,13 @@ impl UnevenBuilder for LocalBuilder {
                     .stdout(Stdio::piped())
                     .stderr(Stdio::piped());
 
-                Ok((Some(command.spawn()?), tmpdir))
+                Ok((
+                    Some(Box::new(CommandCheckoutTask {
+                        builder: self.get_name(),
+                        child: command.spawn()?,
+                    })),
+                    tmpdir,
+                ))
             }
         }
     }

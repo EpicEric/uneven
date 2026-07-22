@@ -47,8 +47,8 @@ rustPlatform.buildRustPackage {
       --suffix PATH : ${
         lib.makeBinPath [
           nix
-          rsync
           openssh
+          rsync
         ]
       }
   ''

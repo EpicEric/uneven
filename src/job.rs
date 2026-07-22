@@ -29,7 +29,6 @@ use smol::stream::StreamExt;
 use crate::{
     builder::{UnevenBuilder, local::LocalBuilder},
     environment::UnevenEnvironment,
-    utils::pipe_outputs_to_stderr,
     workflow::{UnevenJob, UnevenStepEnvVar},
 };
 
@@ -52,14 +51,7 @@ impl UnevenEnvironment {
 
         let mut result = async {
             if let Some(checkout_child) = checkout_child.as_mut() {
-                let status = checkout_child.status().await?;
-                if !status.success() {
-                    pipe_outputs_to_stderr(checkout_child).await?;
-                    return Err(color_eyre::eyre::eyre!(
-                        "Failed to checkout current directory to {}",
-                        runner
-                    ));
-                }
+                checkout_child.run().await?;
             }
 
             builder.copy_derivations(&job, &guard).await?;
@@ -165,9 +157,7 @@ impl UnevenEnvironment {
             }
         }
 
-        if let Some(checkout_child) = checkout_child.as_mut() {
-            let _ = checkout_child.kill();
-        }
+        drop(checkout_child.take());
         builder.undo_checkout(&cwdir).await?;
 
         result
