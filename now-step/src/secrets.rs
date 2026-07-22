@@ -16,63 +16,14 @@
 
 use std::borrow::Cow;
 
-use serde::{Deserialize, Serialize};
-use zeroize::Zeroizing;
-
-/// A secret containing a string.
-///
-/// On drop, the value is zeroized in memory.
-pub struct SecretString(Zeroizing<String>);
-
-impl SecretString {
-    /// Create a new secret.
-    pub fn new(secret: String) -> Self {
-        Self(Zeroizing::new(secret))
-    }
-
-    /// Get a borrow to the secret value.
-    pub fn get_secret_value(&self) -> &str {
-        self.0.as_ref()
-    }
-}
-
-impl std::fmt::Debug for SecretString {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_tuple("SecretString").field(&"***").finish()
-    }
-}
-
-impl Serialize for SecretString {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        serializer.serialize_str(&self.0)
-    }
-}
-
-impl<'de> Deserialize<'de> for SecretString {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        Ok(Self(Zeroizing::new(String::deserialize(deserializer)?)))
-    }
-}
-
-/// A collection of secrets, ordered from longest to shortest.
-///
-/// On drop, the value are zeroized in memory.
-pub struct SecretStringCollection(Zeroizing<Vec<String>>);
+pub(crate) struct SecretStringCollection(Vec<String>);
 
 impl SecretStringCollection {
-    /// Create a new secret collection.
-    pub fn new() -> Self {
-        Self(Zeroizing::new(Vec::new()))
+    pub(crate) fn new() -> Self {
+        Self(Vec::new())
     }
 
-    /// Add a secret to the collection, keeping longer strings before smaller strings.
-    pub fn push(&mut self, secret: String) {
+    pub(crate) fn push(&mut self, secret: String) {
         if secret.is_empty() {
             return;
         }
@@ -86,8 +37,7 @@ impl SecretStringCollection {
         self.0.insert(index, secret);
     }
 
-    /// Replaces all instances of secrets in this collection with "***".
-    pub fn anonymize<'a>(&self, string: &'a str) -> Cow<'a, str> {
+    pub(crate) fn anonymize<'a>(&self, string: &'a str) -> Cow<'a, str> {
         let mut string = Cow::Borrowed(string);
         for secret in self.0.iter() {
             let mut output: Option<String> = None;

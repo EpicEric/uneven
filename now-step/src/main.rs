@@ -21,6 +21,7 @@ use clap::Parser;
 use crate::run::run;
 
 mod run;
+mod secrets;
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]

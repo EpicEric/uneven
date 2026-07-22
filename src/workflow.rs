@@ -34,7 +34,7 @@ use crate::{
     CheckoutStrategy,
     builder::{NowBuilder, local::LocalBuilder},
     environment::NowEnvironment,
-    project::create_project_source,
+    project::create_now_step_source,
 };
 
 #[derive(Debug, Deserialize)]
@@ -211,7 +211,7 @@ impl NowEnvironment {
             .ok_or_else(|| color_eyre::eyre::eyre!("non-UTF8 path"))?;
         let workflow_path = format!("(/. + {})", serde_json::to_string(&workflow_str)?);
 
-        let nix_workflow = create_project_source()?.join("nix/workflow.nix");
+        let nix_workflow = create_now_step_source()?.join("nix/workflow.nix");
         let nix_workflow_canonical = std::fs::canonicalize(&nix_workflow)?;
         let nix_workflow_str = nix_workflow_canonical
             .to_str()

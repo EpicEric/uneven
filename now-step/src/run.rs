@@ -23,8 +23,9 @@ use std::{
     thread::spawn,
 };
 
-use now_secret::SecretStringCollection;
 use portable_pty::{CommandBuilder, PtySize, native_pty_system};
+
+use crate::secrets::SecretStringCollection;
 
 pub(crate) fn run(derivation: PathBuf, secrets: &Vec<String>) -> color_eyre::Result<()> {
     let env: HashMap<OsString, OsString> = std::env::vars_os().collect();

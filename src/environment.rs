@@ -24,10 +24,12 @@ use std::{
     sync::Mutex,
 };
 
-use now_secret::SecretString;
 use serde::{Deserialize, Serialize};
 
-use crate::workflow::{NowJob, NowJobContainer, NowStepEnvVar, NowWorkflow};
+use crate::{
+    secret::SecretString,
+    workflow::{NowJob, NowJobContainer, NowStepEnvVar, NowWorkflow},
+};
 
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub(crate) struct NowEnvironment {

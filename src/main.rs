@@ -24,6 +24,7 @@ mod builder;
 mod environment;
 mod job;
 mod project;
+mod secret;
 mod utils;
 mod workflow;
 

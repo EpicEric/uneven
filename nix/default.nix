@@ -25,7 +25,6 @@ let
     root = ../.;
     fileset = lib.fileset.unions [
       ../nix
-      ../now-secret
       ../now-step
       ../src
       ../Cargo.toml
