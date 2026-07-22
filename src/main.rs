@@ -21,7 +21,6 @@ use std::{
 };
 
 use clap::{CommandFactory, Parser, ValueEnum};
-use color_eyre::eyre::eyre;
 
 use crate::environment::NowEnvironment;
 
@@ -47,6 +46,11 @@ pub(crate) enum CheckoutStrategy {
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
 enum Command {
+    /// Initialize a basic workflow.
+    Init {
+        /// Path to the workflow.
+        workflow: Option<PathBuf>,
+    },
     /// Run a workflow.
     Run {
         /// Path to the workflow.
@@ -93,6 +97,23 @@ enum Command {
 
 fn main() -> color_eyre::Result<()> {
     match Command::parse() {
+        Command::Init { workflow } => {
+            let path = workflow.unwrap_or(PathBuf::from("now.nix"));
+            if path.exists() {
+                return Err(color_eyre::eyre::eyre!(
+                    "'{}' already exists",
+                    path.to_string_lossy(),
+                ));
+            }
+            if let Some(parent) = path.parent() {
+                std::fs::create_dir_all(parent)?;
+            }
+            std::fs::write(&path, include_bytes!("init.nix"))?;
+            eprintln!(
+                "'{}' has been initialized with a basic workflow",
+                path.to_string_lossy(),
+            )
+        }
         Command::Run {
             mut workflow,
             jobs,
@@ -105,13 +126,16 @@ fn main() -> color_eyre::Result<()> {
                 if now.exists() && !now.is_dir() {
                     workflow = now;
                 } else {
-                    return Err(eyre!(
+                    return Err(color_eyre::eyre::eyre!(
                         "Workflow 'now.nix' not found in directory '{}'",
                         workflow.to_string_lossy()
                     ));
                 }
             } else if !workflow.exists() {
-                return Err(eyre!("Workflow '{}' not found", workflow.to_string_lossy()));
+                return Err(color_eyre::eyre::eyre!(
+                    "Workflow '{}' not found",
+                    workflow.to_string_lossy()
+                ));
             }
             let mut environment = NowEnvironment::get_for_workflow(&workflow, env_file.as_ref())?;
             environment.run_workflow(workflow, jobs, eval, checkout)?;
@@ -134,7 +158,10 @@ fn main() -> color_eyre::Result<()> {
                 stdout.write_all(derivation.as_os_str().as_bytes())?;
                 stdout.flush()?;
             } else {
-                return Err(eyre!("Failed to build {}", derivation.to_string_lossy()));
+                return Err(color_eyre::eyre::eyre!(
+                    "Failed to build {}",
+                    derivation.to_string_lossy()
+                ));
             }
         }
     }
