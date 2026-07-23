@@ -24,6 +24,7 @@ use std::{
 
 use futures::{TryStreamExt, stream::FuturesUnordered};
 use owo_colors::OwoColorize;
+use petgraph::matrix_graph::NodeIndex;
 use smol::{channel::TryRecvError, stream::StreamExt};
 
 use crate::{
@@ -32,7 +33,8 @@ use crate::{
     workflow::{NowJob, NowStepEnvVar},
 };
 
-type JobResult<'a> = Pin<Box<dyn Future<Output = color_eyre::Result<()>> + 'a>>;
+pub(crate) type JobResult = color_eyre::Result<NodeIndex<u32>>;
+type JobFut<'a> = Pin<Box<dyn Future<Output = JobResult> + 'a>>;
 
 impl NowEnvironment {
     async fn run_job(&self, builder: &dyn NowBuilder, job: NowJob) -> color_eyre::Result<()> {
@@ -175,15 +177,20 @@ impl NowEnvironment {
         &'a self,
         local_builder: &'a LocalBuilder,
         job: NowJob,
-    ) -> Pin<Box<dyn Future<Output = color_eyre::Result<()>> + 'a>> {
-        Box::pin(self.run_job(local_builder, job))
+        node_index: NodeIndex<u32>,
+    ) -> JobFut<'a> {
+        Box::pin(async move {
+            let result = self.run_job(local_builder, job).await;
+            result.map(|_| node_index)
+        })
     }
 
     pub(crate) fn run_jobs_multiple<'a>(
         &'a self,
         local_builder: &'a LocalBuilder,
         jobs: Vec<NowJob>,
-    ) -> color_eyre::Result<(JobResult<'a>, JobResult<'a>)> {
+        node_index: NodeIndex<u32>,
+    ) -> color_eyre::Result<JobFut<'a>> {
         let fail_fast = FuturesUnordered::new();
         let no_fail_fast = FuturesUnordered::new();
 
@@ -200,26 +207,30 @@ impl NowEnvironment {
             }
         }
 
-        Ok((
-            Box::pin(async {
-                let mut result = Ok(());
-                let mut stream = fail_fast.into_stream();
-                while let Some(future) = stream.next().await {
-                    if future.is_err() && result.is_ok() {
-                        local_builder.cancel_builders();
-                        result = future;
+        Ok(Box::pin(async move {
+            let (fail_fast, no_fail_fast) = smol::future::zip(
+                async {
+                    let mut result = Ok(());
+                    let mut stream = fail_fast.into_stream();
+                    while let Some(future) = stream.next().await {
+                        if future.is_err() && result.is_ok() {
+                            local_builder.cancel_builders();
+                            result = future;
+                        }
                     }
-                }
-                result
-            }),
-            Box::pin(async {
-                let mut result = Ok(());
-                let mut stream = no_fail_fast.into_stream();
-                while let Some(future) = stream.next().await {
-                    result = result.and(future);
-                }
-                result
-            }),
-        ))
+                    result
+                },
+                async {
+                    let mut result = Ok(());
+                    let mut stream = no_fail_fast.into_stream();
+                    while let Some(future) = stream.next().await {
+                        result = result.and(future);
+                    }
+                    result
+                },
+            )
+            .await;
+            fail_fast.and(no_fail_fast).map(|_| node_index)
+        }))
     }
 }

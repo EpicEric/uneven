@@ -53,11 +53,11 @@ enum Command {
         workflow: PathBuf,
 
         /// Jobs to target in this run. If unspecified, all jobs are run.
-        #[arg(long = "job")]
+        #[arg(short, long = "job")]
         jobs: Vec<String>,
 
         /// Optional dotenv file to read environment variables from.
-        #[arg(long)]
+        #[arg(short, long)]
         env_file: Option<PathBuf>,
 
         /// Evaluate but don't run the workflow.
@@ -78,7 +78,7 @@ enum Command {
         ///
         /// For more information on the syntax, see:
         /// <https://nix.dev/manual/nix/latest/command-ref/conf-file#conf-builders>
-        #[arg(long)]
+        #[arg(short, long)]
         builders: Option<String>,
     },
 

@@ -24,14 +24,12 @@ use std::{
     sync::Mutex,
 };
 
-use serde::{Deserialize, Serialize};
-
 use crate::{
     secret::SecretString,
     workflow::{NowJob, NowJobContainer, NowStepEnvVar, NowWorkflow},
 };
 
-#[derive(Debug, Default, Serialize, Deserialize)]
+#[derive(Debug)]
 pub(crate) struct NowEnvironment {
     pub(crate) secrets: HashMap<String, SecretString>,
     pub(crate) vars: HashMap<String, String>,
@@ -111,7 +109,7 @@ impl NowEnvironment {
             .ok_or_else(|| color_eyre::eyre::eyre!("non-UTF8 path"))?;
         let workflow_path = format!("(/. + {})", serde_json::to_string(&workflow_str)?);
 
-        let env_var_names = serde_json::to_string(&serde_json::to_string(
+        let env_var_json = serde_json::to_string(&serde_json::to_string(
             &env_vars
                 .keys()
                 .filter_map(|key| key.to_str())
@@ -119,7 +117,7 @@ impl NowEnvironment {
         )?)?;
 
         let nix_command = format!(
-            "import ./nix/env.nix {{ }} {workflow_path} (builtins.fromJSON {env_var_names})"
+            "import ./nix/env.nix {{ }} {workflow_path} (builtins.fromJSON {env_var_json})"
         );
 
         let mut command = Command::new("nix");

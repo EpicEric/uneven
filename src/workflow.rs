@@ -22,7 +22,7 @@ use std::{
     process::Command,
 };
 
-use futures::{TryStreamExt, stream::FuturesUnordered};
+use futures::stream::FuturesUnordered;
 use owo_colors::OwoColorize;
 use petgraph::{
     acyclic::Acyclic, algo::Cycle, matrix_graph::NodeIndex, stable_graph::StableDiGraph,
@@ -34,6 +34,7 @@ use crate::{
     CheckoutStrategy,
     builder::{NowBuilder, local::LocalBuilder},
     environment::NowEnvironment,
+    job::JobResult,
     project::create_nix_project_source,
 };
 
@@ -147,7 +148,10 @@ impl NowEnvironment {
                 format!("{}>", builder.get_name()).style(style)
             );
         }
-        let mut tree = workflow.build_graph(jobs)?;
+        let NowWorkflowGraph {
+            dag: mut tree,
+            mut nodes,
+        } = workflow.build_graph(jobs)?;
 
         let executor = smol::LocalExecutor::new();
 
@@ -164,7 +168,10 @@ impl NowEnvironment {
         });
 
         let workflow_task = executor.spawn(async {
-            'tree: loop {
+            let mut futures = FuturesUnordered::<Pin<Box<dyn Future<Output = JobResult>>>>::new();
+            let mut result = Ok(());
+
+            loop {
                 let mut current_nodes: HashSet<NodeIndex<u32>> = HashSet::new();
                 for node in tree.nodes_iter() {
                     if tree
@@ -176,40 +183,38 @@ impl NowEnvironment {
                     }
                 }
 
-                debug_assert!(!current_nodes.is_empty());
-
-                let futures = FuturesUnordered::<
-                    Pin<Box<dyn Future<Output = color_eyre::Result<()>>>>,
-                >::new();
-
-                for node in current_nodes {
-                    let node = tree.remove_node(node).expect("node exists");
-                    match node {
-                        NowJobNode::Root => {
+                for node_index in current_nodes {
+                    let node_weight = &tree[node_index];
+                    match node_weight {
+                        DagNode::Root => {
                             debug_assert!(tree.node_count() == 0);
-                            break 'tree;
                         }
-                        NowJobNode::Single(job) => {
-                            futures.push(self.run_job_single(&builder, job));
-                        }
-                        NowJobNode::Multiple(job_vec) => {
-                            let (fail_fast, no_fail_fast) =
-                                self.run_jobs_multiple(&builder, job_vec)?;
-                            futures.push(fail_fast);
-                            futures.push(no_fail_fast);
-                        }
+                        DagNode::Job => match nodes.remove(&node_index) {
+                            Some(NowJobContainer::Single(job)) => {
+                                futures.push(self.run_job_single(&builder, job, node_index))
+                            }
+                            Some(NowJobContainer::Multiple(job_vec)) => {
+                                futures
+                                    .push(self.run_jobs_multiple(&builder, job_vec, node_index)?);
+                            }
+                            None => (),
+                        },
                     }
                 }
 
-                let mut result = Ok(());
-                let mut stream = futures.into_stream();
-                while let Some(future) = stream.next().await {
-                    result = result.and(future);
-                }
-                result?;
+                if let Some(future) = futures.next().await {
+                    match future {
+                        Ok(node_index) => {
+                            tree.remove_node(node_index);
+                        }
+                        Err(error) => {
+                            result = result.and(Err(error));
+                        }
+                    }
+                } else {
+                    return result;
+                };
             }
-
-            Ok(())
         });
 
         smol::future::block_on(executor.run(smol::future::or(workflow_task, ctrl_c_task)))
@@ -261,21 +266,23 @@ impl NowEnvironment {
 }
 
 #[derive(Debug)]
-enum NowJobNode {
+enum DagNode {
     Root,
-    Single(NowJob),
-    Multiple(Vec<NowJob>),
+    Job,
+}
+
+struct NowWorkflowGraph {
+    dag: Acyclic<StableDiGraph<DagNode, ()>>,
+    nodes: HashMap<NodeIndex<u32>, NowJobContainer>,
 }
 
 impl NowWorkflow {
-    fn build_graph(
-        self,
-        jobs: Vec<String>,
-    ) -> color_eyre::Result<Acyclic<StableDiGraph<NowJobNode, ()>>> {
+    fn build_graph(self, jobs: Vec<String>) -> color_eyre::Result<NowWorkflowGraph> {
         let mut graph = StableDiGraph::new();
-        let root = graph.add_node(NowJobNode::Root);
+        let root = graph.add_node(DagNode::Root);
 
-        let mut nodes: HashMap<String, NodeIndex<u32>> = HashMap::new();
+        let mut nodes: HashMap<NodeIndex<u32>, NowJobContainer> = HashMap::new();
+        let mut graph_nodes: HashMap<String, NodeIndex<u32>> = HashMap::new();
         let mut edges: HashMap<String, HashSet<String>> = HashMap::new();
 
         for (job_id, job) in self.jobs.into_iter() {
@@ -287,8 +294,9 @@ impl NowWorkflow {
                             .or_default()
                             .insert(need.clone());
                     }
-                    let node = graph.add_node(NowJobNode::Single(job));
-                    nodes.insert(job_id, node);
+                    let node = graph.add_node(DagNode::Job);
+                    nodes.insert(node, NowJobContainer::Single(job));
+                    graph_nodes.insert(job_id, node);
                     graph.add_edge(node, root, ());
                 }
                 NowJobContainer::Multiple(job_vec) => {
@@ -298,8 +306,9 @@ impl NowWorkflow {
                             .or_default()
                             .insert(need.clone());
                     }
-                    let node = graph.add_node(NowJobNode::Multiple(job_vec));
-                    nodes.insert(job_id, node);
+                    let node = graph.add_node(DagNode::Job);
+                    nodes.insert(node, NowJobContainer::Multiple(job_vec));
+                    graph_nodes.insert(job_id, node);
                     graph.add_edge(node, root, ());
                 }
             }
@@ -308,10 +317,10 @@ impl NowWorkflow {
         for (from, to) in edges {
             for edge in to {
                 graph.add_edge(
-                    *nodes
+                    *graph_nodes
                         .get(&edge)
                         .ok_or_else(|| color_eyre::eyre::eyre!("Unknown node {}", edge))?,
-                    *nodes
+                    *graph_nodes
                         .get(&from)
                         .ok_or_else(|| color_eyre::eyre::eyre!("Unknown node {}", from))?,
                     (),
@@ -324,7 +333,7 @@ impl NowWorkflow {
             let job_nodes = jobs
                 .iter()
                 .map(|job_id| {
-                    nodes
+                    graph_nodes
                         .get(job_id)
                         .map(|index| *index)
                         .ok_or_else(|| color_eyre::eyre::eyre!("Unknown job '{job_id}'"))
@@ -348,15 +357,17 @@ impl NowWorkflow {
             graph.retain_nodes(|_, node| node == root || keep.contains(&node));
         }
 
-        graph.try_into().map_err(|cycle: Cycle<_>| {
+        let dag = graph.try_into().map_err(|cycle: Cycle<_>| {
             color_eyre::eyre::eyre!(
                 "Cycle detected on '{}'",
-                nodes
+                graph_nodes
                     .iter()
                     .find(|(_, value)| **value == cycle.node_id())
                     .map(|(key, _)| key.clone())
                     .unwrap_or("unknown".into())
             )
-        })
+        })?;
+
+        Ok(NowWorkflowGraph { dag, nodes })
     }
 }

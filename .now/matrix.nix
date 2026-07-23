@@ -29,6 +29,19 @@
       }
     );
 
+    local-2 = runner.matrix [ { } ] (
+      { ... }: {
+        needs = [ "local" ];
+        steps = [
+          {
+            run = ''
+              ls
+            '';
+          }
+        ];
+      }
+    );
+
     remote = runner.matrix [ { requiredSystemFeatures = [ "now" ]; } ] (
       { ... }: {
         steps = [
