@@ -21,19 +21,6 @@ const now_step = @import("now_step");
 const pty = @import("zigpty");
 const zigcli = @import("zigcli");
 
-fn redact(
-    allocator: std.mem.Allocator,
-    line: []const u8,
-    secrets: []const []const u8,
-) ![]const u8 {
-    var current: []const u8 = line;
-    for (secrets) |secret| {
-        if (std.mem.indexOf(u8, current, secret) == null) continue;
-        current = try std.mem.replaceOwned(u8, allocator, current, secret, "***");
-    }
-    return current;
-}
-
 pub fn main(init: std.process.Init) !void {
     const allocator: std.mem.Allocator = init.arena.allocator();
 

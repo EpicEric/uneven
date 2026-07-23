@@ -55,6 +55,7 @@ impl LocalBuilder {
     pub(crate) fn new(
         environment: &NowEnvironment,
         strategy: CheckoutStrategy,
+        builders: Option<String>,
     ) -> color_eyre::Result<Self> {
         let output = std::process::Command::new("nix")
             .args([
@@ -75,7 +76,7 @@ impl LocalBuilder {
 
         let config: NixConfig = serde_json::from_slice(&output.stdout)?;
 
-        let remote_builders = RemoteBuilder::get_remote_builders(&config, strategy)?;
+        let remote_builders = RemoteBuilder::get_remote_builders(&config, strategy, builders)?;
 
         let (cancellation, cancellation_rx) = channel::bounded(1);
 

@@ -107,11 +107,18 @@ Run it with:
 
 ```bash
 now run now.nix
-# --- or ---
-now run --env-file .env .  # Looks for a now.nix file in the directory
-# --- or ---
-now run --job deploy .     # Runs one or more jobs (and any dependencies)
+
+# Loads envvars from a dotenv file, and runs the now.nix file in the current directory
+now run --env-file .env .
+
+# Runs one or more jobs (and any dependencies), and specifies remote builders for the run
+now run \
+    --job deploy \
+    --builders "ssh://mac aarch64-darwin" \
+    .now/remote.nix
 ```
+
+For a full list of options, run `now run --help`.
 
 ## Tests
 

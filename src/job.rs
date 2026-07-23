@@ -39,9 +39,8 @@ impl NowEnvironment {
         let guard = builder.acquire().await;
         let style = builder.get_style();
         let runner = builder.get_name();
-        match guard.try_recv() {
-            Ok(()) | Err(TryRecvError::Closed) => return Ok(()),
-            Err(TryRecvError::Empty) => (),
+        if matches!(guard.try_recv(), Ok(()) | Err(TryRecvError::Closed)) {
+            return Err(color_eyre::eyre::eyre!("Runner aborted"));
         }
         eprintln!(
             "{} Running job '{}'...",

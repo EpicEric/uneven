@@ -22,15 +22,24 @@
   openssh,
   rsync,
   rustPlatform,
-  src,
   stdenv,
 }:
 rustPlatform.buildRustPackage {
   pname = "now";
-  version = (lib.importTOML ../Cargo.toml).package.version;
+  version = (lib.importTOML ./Cargo.toml).package.version;
 
-  inherit src;
-  cargoLock.lockFile = ../Cargo.lock;
+  src = lib.fileset.toSource {
+    root = ./.;
+    fileset = lib.fileset.unions [
+      ./nix
+      ./now-step
+      ./src
+      ./Cargo.toml
+      ./Cargo.lock
+    ];
+  };
+
+  cargoLock.lockFile = ./Cargo.lock;
 
   strictDeps = true;
   __structuredAttrs = true;

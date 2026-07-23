@@ -19,21 +19,8 @@
   pkgs ? import <nixpkgs> { inherit system; },
 }:
 let
-  inherit (pkgs) lib;
-
-  src = lib.fileset.toSource {
-    root = ../.;
-    fileset = lib.fileset.unions [
-      ../nix
-      ../now-step
-      ../src
-      ../Cargo.toml
-      ../Cargo.lock
-    ];
-  };
-
-  now = pkgs.callPackage ./package.nix { inherit src; };
-  now-step = pkgs.callPackage ../now-step/default.nix { };
+  now = pkgs.callPackage ../package.nix { };
+  now-step = pkgs.callPackage ../now-step/package.nix { };
 in
 {
   inherit now now-step;

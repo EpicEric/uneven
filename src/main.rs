@@ -18,7 +18,7 @@ use std::path::PathBuf;
 
 use clap::{CommandFactory, Parser, ValueEnum};
 
-use crate::environment::NowEnvironment;
+use crate::{environment::NowEnvironment, workflow::NowWorkflowParams};
 
 mod builder;
 mod environment;
@@ -46,28 +46,42 @@ enum Command {
         /// Path to the workflow.
         workflow: Option<PathBuf>,
     },
+
     /// Run a workflow.
     Run {
         /// Path to the workflow.
         workflow: PathBuf,
+
         /// Jobs to target in this run. If unspecified, all jobs are run.
         #[arg(long = "job")]
         jobs: Vec<String>,
+
         /// Optional dotenv file to read environment variables from.
         #[arg(long)]
         env_file: Option<PathBuf>,
+
         /// Evaluate but don't run the workflow.
         #[arg(long)]
         eval: bool,
+
         /// Strategy for checking out the current working directory.
         #[arg(
-            long,
+            long = "checkout",
             value_enum,
             default_value_t = CheckoutStrategy::Default,
             value_name = "STRATEGY",
         )]
-        checkout: CheckoutStrategy,
+        checkout_strategy: CheckoutStrategy,
+
+        /// A semicolon-separated list of build machines.
+        /// When specified, overrides the remote builders configuration of the host.
+        ///
+        /// For more information on the syntax, see:
+        /// <https://nix.dev/manual/nix/latest/command-ref/conf-file#conf-builders>
+        #[arg(long)]
+        builders: Option<String>,
     },
+
     /// Generate shell completions.
     Completions {
         /// Which shell to generate completions for.
@@ -99,7 +113,8 @@ fn main() -> color_eyre::Result<()> {
             jobs,
             env_file,
             eval,
-            checkout,
+            checkout_strategy,
+            builders,
         } => {
             if workflow.is_dir() {
                 let now = workflow.join("now.nix");
@@ -118,7 +133,13 @@ fn main() -> color_eyre::Result<()> {
                 ));
             }
             let mut environment = NowEnvironment::get(&workflow, env_file.as_ref())?;
-            environment.run_workflow(workflow, jobs, eval, checkout)?;
+            environment.run_workflow(NowWorkflowParams {
+                workflow,
+                jobs,
+                eval,
+                checkout_strategy,
+                builders,
+            })?;
         }
         Command::Completions { shell } => {
             clap_complete::generate(

@@ -34,7 +34,7 @@ use crate::{
     CheckoutStrategy,
     builder::{NowBuilder, local::LocalBuilder},
     environment::NowEnvironment,
-    project::create_project_source,
+    project::create_nix_project_source,
 };
 
 #[derive(Debug, Deserialize)]
@@ -102,15 +102,26 @@ pub(crate) struct NowStepDownload {
     pub(crate) download_name: String,
 }
 
+pub(crate) struct NowWorkflowParams {
+    pub(crate) workflow: PathBuf,
+    pub(crate) jobs: Vec<String>,
+    pub(crate) eval: bool,
+    pub(crate) checkout_strategy: CheckoutStrategy,
+    pub(crate) builders: Option<String>,
+}
+
 impl NowEnvironment {
     pub(crate) fn run_workflow(
         &mut self,
-        workflow_path: PathBuf,
-        jobs: Vec<String>,
-        eval: bool,
-        strategy: CheckoutStrategy,
+        NowWorkflowParams {
+            workflow: workflow_path,
+            jobs,
+            eval,
+            checkout_strategy: strategy,
+            builders,
+        }: NowWorkflowParams,
     ) -> color_eyre::Result<()> {
-        let builder = LocalBuilder::new(self, strategy)?;
+        let builder = LocalBuilder::new(self, strategy, builders)?;
         let style = builder.get_style();
 
         eprintln!(
@@ -211,7 +222,7 @@ impl NowEnvironment {
             .ok_or_else(|| color_eyre::eyre::eyre!("non-UTF8 path"))?;
         let workflow_path = format!("(/. + {})", serde_json::to_string(&workflow_str)?);
 
-        let nix_workflow = create_project_source()?.join("nix/workflow.nix");
+        let nix_workflow = create_nix_project_source()?.join("nix/workflow.nix");
         let nix_workflow_canonical = std::fs::canonicalize(&nix_workflow)?;
         let nix_workflow_str = nix_workflow_canonical
             .to_str()

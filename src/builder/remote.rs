@@ -92,8 +92,11 @@ impl RemoteBuilder {
     pub(crate) fn get_remote_builders(
         config: &NixConfig,
         strategy: CheckoutStrategy,
+        builders: Option<String>,
     ) -> color_eyre::Result<Vec<Self>> {
-        let builders = if let Some(file) = config.builders.value.strip_prefix('@') {
+        let builders = if let Some(builders) = builders {
+            builders
+        } else if let Some(file) = config.builders.value.strip_prefix('@') {
             if !std::fs::exists(file)? {
                 return Ok(vec![]);
             }
@@ -107,7 +110,7 @@ impl RemoteBuilder {
             .expect("valid regex")
             .split(&builders)
         {
-            let mut iter = builder.split(' ');
+            let mut iter = builder.trim().split(' ');
 
             let Some(ssh_uri) = iter.next() else {
                 continue;

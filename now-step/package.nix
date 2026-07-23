@@ -19,6 +19,8 @@
   lib,
   zig_0_16,
   stdenv,
+
+  optimizeLevel ? "Debug",
 }:
 stdenv.mkDerivation {
   name = "now-step";
@@ -40,6 +42,7 @@ stdenv.mkDerivation {
   zigBuildFlags = [
     "--system"
     "${callPackage ./deps.nix { }}"
+    "-Doptimize=${optimizeLevel}"
   ];
 
   dontUseZigCheck = true;
